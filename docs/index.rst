@@ -1,24 +1,71 @@
 :og:description: Rubin Observatory telemetry and metrics service
 :html_theme.sidebar_secondary.remove:
 
-#########
-sasquatch
-#########
+########
+Overview
+########
 
-Rubin Observatory telemetry and metrics service
+Sasquatch is the Rubin Observatory service for recording, displaying, and alerting on telemetry data and metrics.
 
-Install sasquatch from PyPI:
+Sasquatch is currently deployed at the Summit, USDF and test stands through `Phalanx`_.
 
-.. code-block:: bash
+Sasquatch architecture
+======================
 
-   pip install sasquatch
 
-sasquatch is developed on GitHub at https://github.com/lsst-sqre/sasquatch.
+.. figure:: /_static/sasquatch_architecture_single.svg
+   :name: Sasquatch architecture overview.
+
+
+Kafka
+-----
+
+In Sasquatch, `Kafka`_ is used as a message queue to InfluxDB and for data replication between :ref:environments.
+
+Kafka is managed by `Strimzi`_.
+In addition to Strimzi components, Sasquatch includes the Confluent Schema Registry and the Confluent Kafka REST proxy, used for connecting HTTP-based clients with Kafka.
+
+The Kafdrop UI is used to browse the Kafka topics and view the messages.
+
+.. _Kafka: https://kafka.apache.org
+.. _Strimzi: https://strimzi.io
+
+Kafka Connect
+-------------
+
+In Sasquatch, Kafka connectors are managed by the `kafka-connect-manager`_ tool.
+
+The InfluxDB Sink connector consume Kafka topics, converts the records to the InfluxDB line protocol and writes them to an InfluxDB database.
+Sasquatch :ref:`namespaces` map to InfluxDB databases.
+
+The MirrorMaker 2 source connector is used for data replication between Sasquatch :ref:`environments`.
+
+Sasquatch connectors are configured in `Phalanx`_.
+
+InfluxDB
+--------
+
+InfluxDB is an open-source `time series database`_ optimized for efficient storage and analysis of time series data.
+
+InfluxDB organizes the data in measurements, fields and tags.
+In Sasquatch, kafka topics (telemetry topics and metrics) map to InfluxDB measurements.
+
+InfluxDB provides an SQL-like query language called `InfluxQL`_ and a more powerful data scripting language called `Flux`_.
+Both languages can be used in Chronograf for data exploration and visualization.
+
+Read more about Sasquatch architecture in `SQR-068`_.
+
+.. _Phalanx: https://phalanx.lsst.io
+.. _kafka-connect-manager: https://kafka-connect-manager.lsst.io/
+.. _time series database: https://www.influxdata.com/time-series-database/
+.. _InfluxQL: https://docs.influxdata.com/influxdb/v1.8/query_language/
+.. _Flux: https://docs.influxdata.com/influxdb/v1.8/flux/
+.. _SQR-068: https://sqr-068.lsst.io
+
 
 .. toctree::
    :hidden:
 
    User guide <user-guide/index>
-   API <api>
-   Change log <changelog>
-   Contributing <dev/index>
+   APIs <apis>
+   Environments <environments>

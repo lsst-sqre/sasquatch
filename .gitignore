@@ -4,3 +4,4 @@
 venv
 /tests/__pycache__
 src/sasquatch.egg-info
+.tox
