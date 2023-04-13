@@ -12,11 +12,11 @@ can easily send data in Avro format.
 Kafka topics
 ============
 
-To send data to Sasquatch, first you need to :ref:`create-a-kafka-topic` for your metric.
+To send data to Sasquatch, first, you need to :ref:`create-a-kafka-topic` for your metric.
 
 .. note::
 
-    Kafka topics need to be created with the right :ref:`namespace prefix <namespaces>` to be added to the Kafka REST Proxy API.
+    Kafka topics must be created with the right :ref:`namespace prefix <namespaces>` to be added to the Kafka REST Proxy API.
 
 Use ``/topics`` in the Kafka REST Proxy API to list the available topics.
 
@@ -25,8 +25,8 @@ At USDF dev, for example, the endpoint for the ``lsst.example.skyFluxMetric`` Ka
 - ``https://usdf-rsp-dev.slac.stanford.edu/sasquatch-rest-proxy/topics/lsst.example.skyFluxMetric``
 
 
-Sending data via the Kafka REST Proxy API
-=========================================
+Send data via the Kafka REST Proxy API
+======================================
 
 To send data to a Kafka topic, make a ``POST`` request to the Kafka REST Proxy API with the Avro schema and records.
 
@@ -96,7 +96,7 @@ A code snippet in Python to send data to the ``lsst.example.skyFluxMetric`` Kafk
 The REST Proxy will register the schema with the Schema Registry.
 If the schema is already registered, the REST Proxy will check the schema compatibility before sending data to Kafka.
 
-Note that from the HTTP response you can get the schema ID and re-use it for subsequent requests.
+Note that from the HTTP response, you can get the schema ID and re-use it for subsequent requests.
 
 .. code:: json
 
@@ -122,7 +122,7 @@ Create a Kafka topic
 
 The Kafka REST Proxy also offers an API for managing Kafka topics.
 
-To create a Kafka topic, first get the Kafka cluster ID.
+To create a Kafka topic, first, get the Kafka cluster ID.
 A code snippet in Python for getting the cluster ID from the USDF dev environment would be:
 
 .. code::
@@ -163,7 +163,7 @@ That creates the ``lsst.example.skyFluxMetric`` Kafka topic with one partition a
 Namespaces
 ==========
 
-The following namespace prefixes are currently configured with the Kafka REST Proxy:
+The following namespaces are currently configured with the Kafka REST Proxy:
 
 - ``lsst.example``
 - ``lsst.debug``
