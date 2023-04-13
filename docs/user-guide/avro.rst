@@ -9,14 +9,12 @@ An advantage of Avro is that it has a schema that comes with the data and suppor
 
 Sasquatch uses the Confluent Schema Registry to ensure schemas can evolve safely.
 In Sasquatch, schema changes must be *forward-compatible* so that consumers of Sasquatch won't break.
-That includes Kafka consumers, InfluxDB queries and even Chronograf dashboards.
+That includes Kafka consumers, InfluxDB queries, and even Chronograf dashboards.
 
 Forward compatibility means that data produced with a new schema can be read by consumers using the last schema.
-An example of a forward compatible schema change is adding a new field.
+An example of a forward-compatible schema change is adding a new field.
 
-.. note::
-
-    Read more about forward compatibility in the `Schema Registry documentation`_.
+Read more about forward compatibility in the `Schema Registry documentation`_.
 
 .. _Schema Registry documentation: https://docs.confluent.io/platform/current/schema-registry/fundamentals/avro.html#forward-compatibility
 
@@ -70,7 +68,7 @@ The following Avro schema will ensure these fields are always present:
 
 Note that the field ``instrument`` has a default value, and thus it is the only optional field in the metric record.
 
-Now, suppose you want to add a table linked to the previous chart in the dashboard to display the visit ID associated with this metric.
+Suppose you want to add a table linked to the previous chart in the dashboard to display the visit ID associated with this metric.
 Adding the ``visit`` field to the schema is a *forward-compatible* change, so that's allowed:
 
 .. code:: json
@@ -111,12 +109,10 @@ Adding the ``visit`` field to the schema is a *forward-compatible* change, so th
 New messages sent to Sasquatch now require the ``visit`` field, and a new version of the dashboard that uses the ``visit`` information can be implemented.
 Note that previous dashboard versions in Sasquatch won't break since they don't use the ``visit`` field.
 
-.. note::
+Read more about Avro schemas and types from the `Avro specification`_.
 
-    Read more about Avro schemas and types from the `Avro specification`_.
+In Sasquatch, the full qualified name for the metric includes the namespace specified in the Avro schema, in the example above ``lsst.example.skyFluxMetric``.
 
-In Sasquatch, the full qualified metric name includes the namespace specified in the Avro schema, in the example above ``lsst.example.skyFluxMetric``.
-
-The next section shows how to use the Kafka REST Proxy for sending data in Avro format to Sasquatch.
+The following section shows how to use the Kafka REST Proxy for sending data in Avro format to Sasquatch.
 
 .. _Avro specification: https://avro.apache.org/docs/1.11.1/specification/
