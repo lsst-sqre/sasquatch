@@ -58,7 +58,7 @@ Consider using aggregation functions like ``mean()`` to sample the time series i
 Chronograf will automatically set the value of ``:interval:`` based on the selected time range.
 The idea behind the ``:interval:`` template variable is that you don't need to return high resolution data for visualization if you select a large time range.
 
-Use the button ``Show template values`` in the query editor to inspect the actual values of template variables in your query.
+Use the :guilabel:`Show template values` button in the query editor UI to inspect the actual values of template variables in your query.
 
 Use custom template variables to build interactive dashboards
 =============================================================
