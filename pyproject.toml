@@ -23,7 +23,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 requires-python = ">=3.8"
-dependencies = []
+dependencies = ["sphinxcontrib-youtube"]
 dynamic = ["version"]
 
 [project.optional-dependencies]
@@ -36,6 +36,7 @@ dev = [
     "mypy",
     # Documentation
     "documenteer[guide]",
+    "sphinxcontrib-youtube",
 ]
 
 [project.urls]

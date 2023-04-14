@@ -91,6 +91,8 @@ An example of value for the ``:m2_test:`` template variable could be:
 
 Then, by selecting ``m2 actuator stroke A4 test`` in the UI, you jump straight to when the test was performed.
 
+.. vimeo:: 817809848
+
 Read more about `custom template variables`_ in the Chronograf documentation  .
 
 .. _custom template variables: https://docs.influxdata.com/chronograf/v1.10/guides/dashboard-template-variables/#use-template-variables
