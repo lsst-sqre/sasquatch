@@ -11,6 +11,8 @@ disable_primary_sidebars = [
     "index",
     "changelog",
 ]
+extensions = ["sphinxcontrib.youtube"]
+
 
 [sphinx.intersphinx.projects]
 python = "https://docs.python.org/3/"
