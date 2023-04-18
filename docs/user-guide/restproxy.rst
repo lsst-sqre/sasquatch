@@ -30,7 +30,7 @@ Send data via the Kafka REST Proxy API
 
 To send data to a Kafka topic, make a ``POST`` request to the Kafka REST Proxy API with the Avro schema and records.
 
-From the example in the previous section, the request body would be:
+From the example in the previous section, the request body in JSON would be:
 
 .. code:: json
 
@@ -49,8 +49,7 @@ From the example in the previous section, the request body would be:
 	]
     }
 
-Note that the Avro schema needs to be stringified with backslashes before each double quote.
-This schema formatting is required to send the Avro schema via the REST Proxy API.
+Note that the Avro schema needs to be stringified, that's required when sending the Avro schema via the REST Proxy API.
 
 In addition to the request body, you need the ``Content-type`` and ``Accept`` headers to indicate an HTTP request that contains an Avro payload encoded in JSON and compatible with the REST Proxy v2 API.
 
@@ -62,7 +61,7 @@ In addition to the request body, you need the ``Content-type`` and ``Accept`` he
     }
 
 
-A code snippet in Python to send data to the ``lsst.example.skyFluxMetric`` Kafka topic at the USDF dev environment would be:
+A code snippet in Python for sending data to the ``lsst.example.skyFluxMetric`` Kafka topic at the USDF dev environment would be:
 
 .. code:: Python
 
