@@ -7,16 +7,17 @@ Avro and schema evolution
 Sasquatch uses the Avro format.
 An advantage of Avro is that it has a schema that comes with the data and supports schema evolution.
 
-Sasquatch uses the Confluent Schema Registry to ensure schemas can evolve safely.
+Sasquatch uses the `Confluent Schema Registry`_ to ensure schemas can evolve safely.
 In Sasquatch, schema changes must be *forward-compatible* so that consumers of Sasquatch won't break.
 That includes Kafka consumers, InfluxDB queries, and even Chronograf dashboards.
 
-Forward compatibility means that data produced with a new schema can be read by consumers using the last schema.
+Forward compatibility means that data produced with a new schema can be read by consumers using the previous schema.
 An example of a forward-compatible schema change is adding a new field.
+Removing or renaming an existing field are non forward-compatible schema changes.
 
-Read more about forward compatibility in the `Schema Registry documentation`_.
+Read more about forward compatibility in the `Confluent Schema Registry`_ documentation.
 
-.. _Schema Registry documentation: https://docs.confluent.io/platform/current/schema-registry/fundamentals/avro.html#forward-compatibility
+.. _Confluent Schema Registry: https://docs.confluent.io/platform/current/schema-registry/fundamentals/avro.html#forward-compatibility
 
 For example, assume the ``skyFluxMetric`` metric with the following payload:
 
@@ -52,7 +53,6 @@ The following Avro schema will ensure these fields are always present:
             {
                 "name": "instrument",
                 "type": "string",
-                "default": "LSSTCam-imSim"
             },
             {
                 "name": "meanSky",
@@ -64,9 +64,6 @@ The following Avro schema will ensure these fields are always present:
             }
         ]
     }
-
-
-Note that the field ``instrument`` has a default value, and thus it is the only optional field in the metric record.
 
 Suppose you want to add a table linked to the previous chart in the dashboard to display the visit ID associated with this metric.
 Adding the ``visit`` field to the schema is a *forward-compatible* change, so that's allowed:
@@ -89,7 +86,6 @@ Adding the ``visit`` field to the schema is a *forward-compatible* change, so th
             {
                 "name": "instrument",
                 "type": "string",
-                "default": "LSSTCam-imSim"
             },
             {
                 "name": "visit",
@@ -106,13 +102,13 @@ Adding the ``visit`` field to the schema is a *forward-compatible* change, so th
         ]
     }
 
-New messages sent to Sasquatch now require the ``visit`` field, and a new version of the dashboard that uses the ``visit`` information can be implemented.
-Note that previous dashboard versions in Sasquatch won't break since they don't use the ``visit`` field.
+New messages sent to Sasquatch now require the ``visit`` field and a new version of the dashboard that uses the ``visit`` information can be implemented.
+Because this is a forward-compatible schema change, previous dashboard versions won't break since they don't use the ``visit`` field.
 
-Read more about Avro schemas and types from the `Avro specification`_.
+The full qualified name for metric includes the namespace specified in the Avro schema, ``lsst.example.skyFluxMetric`` in the example above.
 
-In Sasquatch, the full qualified name for the metric includes the namespace specified in the Avro schema, in the example above ``lsst.example.skyFluxMetric``.
+In Sasquatch, a metric (or a telemetry topic) corresponds to a Kafka topic, and namespaces are important when sending data via the Kafka REST Proxy.
 
-The following section shows how to use the Kafka REST Proxy for sending data in Avro format to Sasquatch.
+Read more about Avro schemas and types in the `Avro specification`_.
 
 .. _Avro specification: https://avro.apache.org/docs/1.11.1/specification/

@@ -129,6 +129,13 @@ In Chronograf, tables are linked to charts via the time column.
 .. _log viewer: https://docs.influxdata.com/chronograf/v1.10/guides/analyzing-logs/
 
 
+Chronograf shared account
+=========================
+
+The ``chronograf-viewer`` shared account is meant to be used for the Observatory control room displays, the password can be found in LSST IT/SQuaRE 1Password or
+you can ask for it in the support channel ``#com-square-support`` on Slack.
+
+
 .. _advanced:
 
 Advanced dashboards with Flux
@@ -235,3 +242,11 @@ The ``duration()`` function computes the duration of the current state and forma
 where ``_time`` is the timestamp of the last state transition.
 
 Finally, use the ``keep()`` function to keep only the columns of interest in the final table.
+
+Known limitations
+=================
+
+- When adding multiple graphs to one chart, it is not possible to combine different visualization types.
+
+- There's no solution yet to display units in Chronograf charts other than manually adding a suffix to the y-axis label.
+  Units can be obtained from the Kafka topic schema using the EFD client.
