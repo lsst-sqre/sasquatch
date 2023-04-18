@@ -242,3 +242,11 @@ The ``duration()`` function computes the duration of the current state and forma
 where ``_time`` is the timestamp of the last state transition.
 
 Finally, use the ``keep()`` function to keep only the columns of interest in the final table.
+
+Known limitations
+=================
+
+- When adding multiple graphs to one chart, it is not possible to combine different visualization types.
+
+- There's no solution yet to display units in Chronograf charts other than manually adding a suffix to the y-axis label.
+  Units can be obtained from the Kafka topic schema using the EFD client.
