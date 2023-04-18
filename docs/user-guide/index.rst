@@ -14,6 +14,12 @@ User guide
 ..    Connectors <connectors>
 
 .. toctree::
+    :caption: Observatory telemetry (EFD)
+
+    Overview <observatorytelemetry>
+    EFD client <efdclient>
+
+.. toctree::
     :caption: Data exploration and visualization with Chronograf
 
     Overview <chronograf>
