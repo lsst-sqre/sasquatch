@@ -12,7 +12,7 @@ For example, at the USDF environment you can instantiate the EFD client using:
 .. code::
 
    from lsst_efd_client import EfdClient
-   efd = EfdClient('usdf_efd')
+   efd = EfdClient("usdf_efd")
 
    await efd.get_topics()
 

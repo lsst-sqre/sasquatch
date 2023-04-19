@@ -18,6 +18,7 @@ User guide
 
     Overview <observatorytelemetry>
     EFD client <efdclient>
+    Working with timestamps <timestamps>
 
 .. toctree::
     :caption: Data exploration and visualization with Chronograf
