@@ -105,9 +105,8 @@ Adding the ``visit`` field to the schema is a *forward-compatible* change, so th
 New messages sent to Sasquatch now require the ``visit`` field and a new version of the dashboard that uses the ``visit`` information can be implemented.
 Because this is a forward-compatible schema change, previous dashboard versions won't break since they don't use the ``visit`` field.
 
-The full qualified name for metric includes the namespace specified in the Avro schema, ``lsst.example.skyFluxMetric`` in the example above.
-
-In Sasquatch, a metric (or a telemetry topic) corresponds to a Kafka topic, and namespaces are important when sending data via the Kafka REST Proxy.
+In Sasquatch, a metric (or a telemetry topic) corresponds to a Kafka topic.
+The metric :ref:`namespace <namespaces>` is specified in the Avro schema, and the metric full qualified name in this example is ``lsst.example.skyFluxMetric``.
 
 Read more about Avro schemas and types in the `Avro specification`_.
 

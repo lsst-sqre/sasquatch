@@ -159,13 +159,3 @@ That creates the ``lsst.example.skyFluxMetric`` Kafka topic with one partition a
 
 .. _namespaces:
 
-Namespaces
-==========
-
-The following namespaces are currently configured with the Kafka REST Proxy:
-
-- ``lsst.example``
-- ``lsst.debug``
-- ``lsst.dm``
-
-Only Kafka topics created with those prefixes are added to the Kafka REST Proxy API.
