@@ -20,9 +20,7 @@ To send data to Sasquatch, first, you need to :ref:`create-a-kafka-topic` for yo
 
 Use ``/topics`` in the Kafka REST Proxy API to list the available topics.
 
-At USDF dev, for example, the endpoint for the ``lsst.example.skyFluxMetric`` Kafka topic is:
-
-- ``https://usdf-rsp-dev.slac.stanford.edu/sasquatch-rest-proxy/topics/lsst.example.skyFluxMetric``
+At USDF dev, for example, the endpoint for the ``lsst.example.skyFluxMetric`` Kafka topic is https://usdf-rsp-dev.slac.stanford.edu/sasquatch-rest-proxy/topics/lsst.example.skyFluxMetric from which you can see the topic configuration in Kafka.
 
 
 Send data via the Kafka REST Proxy API
