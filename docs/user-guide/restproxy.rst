@@ -49,6 +49,14 @@ From the example in the previous section, the request body in JSON would be:
 
 Note that the Avro schema needs to be stringified, that's required when sending the Avro schema via the REST Proxy API.
 
+.. note::
+
+    Sasquatch accepts Unix epoch timestamps with Avro type ``long``, for example, ``1681248783342569``.
+    Another option is to use Avro type ``double`` and specify the Unix epoch timestamps in seconds, for example, ``1681248783.342569``.
+    By default Sasquatch assumes timestamps in microsseconds precision.
+
+    See :ref:`connectors` for selecting the timestamp field to use as the InfluxDB time and configuring the timestamp precision.
+
 In addition to the request body, you need the ``Content-type`` and ``Accept`` headers to indicate an HTTP request that contains an Avro payload encoded in JSON and compatible with the REST Proxy v2 API.
 
 .. code:: json
