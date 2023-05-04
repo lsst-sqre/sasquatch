@@ -8,10 +8,16 @@ User guide
     :caption: Sending data to Sasquatch
 
     Overview <sendingdata>
+    Namespaces <namespaces>
     Avro and Schema Evolution <avro>
     Kafka REST Proxy <restproxy>
     Kafdrop <kafdrop>
-..    Connectors <connectors>
+
+..  toctree::
+    :caption: Kafka Connect
+
+    Overview <kafkaconnect>
+    InfluxDB Sink <influxdbsink>
 
 .. toctree::
     :caption: Observatory telemetry (EFD)
