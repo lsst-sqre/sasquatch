@@ -35,13 +35,15 @@ Or you might filter the data to only show values for a specific band or instrume
 
     In InfluxDB tags values are always strings.
     Use an empty string when a tag value is missing.
+    Avoid tagging high cardinality fields such as IDs.
+
 
 Configuration
 =============
 
 To configure an InfluxDB Sink connector in Sasquatch, add the connector configuration to the corresponding environment in Phalanx.
 
-For example, in ``values-usdfdev.yaml`` the connector configuration to write Kafka topics in the ``lsst.example`` namespace to InfluxDB looks like:
+For example, in ``values-usdfdev.yaml`` the connector configuration to write topics in the ``lsst.example`` namespace to InfluxDB looks like:
 
 .. code:: yaml
 

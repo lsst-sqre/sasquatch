@@ -20,4 +20,4 @@ The following namespaces are configured in Sasquatch:
 - ``lsst.rubintv`` used by RubinTV data.
 - ``lsst.ci`` used for metrics computed by the CI system.
 - ``lsst.ap`` used for metrics computed by the Alert Production pipeline.
-- ``lsst.drp`` used for metrics computed by the Data Release Processing pipeline.
+- ``lsst.drp`` used for metrics computed by the Data Release Production pipeline.
