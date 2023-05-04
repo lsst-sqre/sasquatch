@@ -15,9 +15,6 @@ In InfluxDB, the database name is based on the namespace so that users can more 
 The following namespaces are configured in Sasquatch:
 
 - ``lsst.example`` used for example metrics in the Sasquatch documentation.
-- ``lsst.debug`` used by developers when debugging Sasquatch.
 - ``lsst.sal`` used by SAL for the observatory telemetry, events and commands topics.
-- ``lsst.rubintv`` used by RubinTV data.
-- ``lsst.ci`` used for metrics computed by the CI system.
-- ``lsst.ap`` used for metrics computed by the Alert Production pipeline.
-- ``lsst.drp`` used for metrics computed by the Data Release Production pipeline.
+- ``lsst.dm`` used for metrics computed by DM Science Pipelines.
+- ``lsst.rubintv`` used for RubinTV data.
