@@ -23,7 +23,7 @@ User guide
     :caption: Observatory telemetry (EFD)
 
     Overview <observatorytelemetry>
-    EFD client <efdclient>
+    The EFD Python client <efdclient>
     Working with timestamps <timestamps>
 
 .. toctree::
