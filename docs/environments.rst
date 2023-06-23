@@ -8,19 +8,24 @@ Environments
 
 The table below summarizes the Sasquatch environments and their main entry points.
 
-+---------------------------+---------------------------------------------------+--------------------------+----------------+
-| **Sasquatch Environment** | **Chronograf UI**                                 | **EFD Client alias**     | **VPN access** |
-+===========================+===================================================+==========================+================+
-| :ref:`Summit<summit>`     | https://summit-lsp.lsst.codes/chronograf          | ``summit_efd``           | Chile VPN      |
-+---------------------------+---------------------------------------------------+--------------------------+----------------+
-| :ref:`USDF<usdf>`         | https://usdf-rsp.slac.stanford.edu/chronograf     | ``usdf_efd``             | Not required   |
-+---------------------------+---------------------------------------------------+--------------------------+----------------+
-| :ref:`USDF dev<usdfdev>`  | https://usdf-rsp-dev.slac.stanford.edu/chronograf | ``usdfdev_efd``          | Not required   |
-+---------------------------+---------------------------------------------------+--------------------------+----------------+
-| :ref:`TTS<tts>`           | https://tucson-teststand.lsst.codes/chronograf    | ``tucson_teststand_efd`` | NOIRLab VPN    |
-+---------------------------+---------------------------------------------------+--------------------------+----------------+
-| :ref:`BTS<bts>`           | https://base-lsp.lsst.codes/chronograf            | ``base_efd``             | Chile VPN      |
-+---------------------------+---------------------------------------------------+--------------------------+----------------+
++---------------------------+---------------------------------------------------+-----------------------------------+----------------+
+| **Sasquatch Environment** | **Chronograf UI**                                 | **EFD Client alias**              | **VPN access** |
++===========================+===================================================+===================================+================+
+| :ref:`Summit<summit>`     | https://summit-lsp.lsst.codes/chronograf          | ``summit_efd``                    | Chile VPN      |
++---------------------------+---------------------------------------------------+-----------------------------------+----------------+
+| :ref:`USDF<usdf>`         | https://usdf-rsp.slac.stanford.edu/chronograf     | ``usdf_efd``                      | Not required   |
++---------------------------+---------------------------------------------------+-----------------------------------+----------------+
+| :ref:`USDF dev<usdfdev>`  | https://usdf-rsp-dev.slac.stanford.edu/chronograf | ``usdfdev_efd``                   | Not required   |
++---------------------------+---------------------------------------------------+-----------------------------------+----------------+
+| :ref:`TTS<tts>`           | https://tucson-teststand.lsst.codes/chronograf    | ``tucson_teststand_efd``          | NOIRLab VPN    |
++---------------------------+---------------------------------------------------+-----------------------------------+----------------+
+| :ref:`BTS<bts>`           | https://base-lsp.lsst.codes/chronograf [#f1]_     | ``base_efd``, ``summit_efd_copy`` | Chile VPN      |
++---------------------------+---------------------------------------------------+-----------------------------------+----------------+
+
+.. rubric:: Footnotes
+
+.. [#f1] The default Chronograf organization at BTS gives access to simulated data.
+         Switch to the "Summit EFD copy" organization to access Summit EFD data from Chronograf at BTS.
 
 .. _summit:
 
