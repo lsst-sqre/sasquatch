@@ -4,21 +4,21 @@
 Namespaces
 ##########
 
-Sasquatch uses namespaces to organize data and prevent naming conflicts between different systems.
+Namespaces are used to organize and differentiate data within different systems or components in Sasquatch.
 
-In Kafka, namespaces are implemented using topic prefixes.
-Use the ``lsst.{system}.{topic}`` convention for the full qualified name of your Kafka topics.
+Use the ``lsst.{system}.{topic}`` convention for the full qualified name of your metrics or topics in Sasquatch.
+
 You can add more hierarquical levels as needed, for exampple ``lsst.{system}.{component}.{topic}``.
 
-In Sasquatch, the first part of the namespace ``lsst.{system}`` is used to name the InfluxDB connector and database, so that users can more easily find and relate data.
+Here are the namespaces already configured:
 
-The following namespaces are configured in Sasquatch:
+- ``lsst.example``: This namespace is used for example metrics in the Sasquatch documentation. It contains metrics that serve as examples for users.
+- ``lsst.sal``: This namespace is used by SAL (the Software Abstraction Layer) for the observatory telemetry, events, and commands topics. It is associated with data related to observatory operations and control.
+- ``lsst.dm``: This namespace is used for metrics computed by DM (Data Management) Science Pipelines.
+- ``lsst.rubintv``: This namespace is used for RubinTV data.
+- ``lsst.camera``: This namespace is used for the Camera diagnostic metrics.
+- ``lsst.verify.ap``: This namespace is used for ``ap_verify`` metrics, which are related to backward compatibility with the ``lsst.verify`` package.
+- ``lsst.verify.drp``: This namespace is used for ``verify_drp`` metrics, which are related to backward compatibility with the ``lsst.verify`` package.
+- ``lsst.debug``: This namespace is used for testing and is available only in the USDF development environment.
 
-- ``lsst.example`` used for example metrics in the Sasquatch documentation.
-- ``lsst.sal`` used by SAL for the observatory telemetry, events and commands topics.
-- ``lsst.dm`` used for metrics computed by DM Science Pipelines.
-- ``lsst.rubintv`` used for RubinTV data.
-- ``lsst.camera`` used for the Camera diagnostic metrics.
-- ``lsst.verify.ap`` used for ``ap_verify`` metrics for backward compatibility with the ``lsst.verify`` package.
-- ``lsst.verify.drp`` used for ``verify_drp`` metrics for backward compatibility with the ``lsst.verify`` package.
-- ``lsst.debug`` used for testing (available at USDF dev environment only).
+By using these namespaces, Sasquatch enables better organization, management, and identification of data within different systems or components, preventing naming conflicts and allowing users to locate and relate data more easily.
