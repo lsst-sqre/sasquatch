@@ -4,12 +4,15 @@
 Overview
 ########
 
-In Sasquatch, data is sent to Kafka first and then to InfluxDB using the InfluxDB sink connector.
+In Sasquatch, data is sent initially to Kafka, a distributed streaming platform, where it acts as a centralized hub for data ingestion.
+Subsequently, the data is routed from Kafka to InfluxDB, a high-performance time series database, utilizing the InfluxDB sink connector.
 
-The :ref:`Kafka REST Proxy <rest-proxy>` is the recommended method for sending data to Sasquatch, especially for clients that are not ready to connect to Kafka and the Schema Registry.
+For seamless integration and easy data transmission, the recommended approach to send data to Sasquatch is through the Kafka REST Proxy.
+This method is particularly useful for clients that are not yet prepared to establish a direct connection with Kafka and its associated Schema Registry.
 
-This section discusses namespaces and the role of Avro in Sasquatch.
-It also shows how to use the :ref:`Kafka REST Proxy <rest-proxy>` API for sending data to Sasquatch.
+This section provides comprehensive insights into the concept of namespaces and highlights the significance of Avro within the context of Sasquatch.
+Additionally, it illustrates the practical implementation of the :ref:`Kafka REST Proxy <rest-proxy>` API, demonstrating how it can be employed to efficiently send data to Sasquatch.
 
-You can reproduce the steps yourself to send data to an example topic to Sasquatch at USDF dev.
-Then you can use :ref:`Kafdrop <kafdrop-ui>` for browsing Kafka topics and viewing the messages.
+To gain hands-on experience and replicate the data transmission process, you can follow the step-by-step instructions outlined.
+By doing so, you will be able to send data to an example topic within Sasquatch, hosted at USDF dev.
+Furthermore, you can utilize :ref:`Kafdrop <kafdrop-ui>`, a user-friendly web-based interface, to browse Kafka topics and visualize the messages being exchanged.
