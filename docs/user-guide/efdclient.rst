@@ -29,17 +29,18 @@ Read more about the methods available in the `EFD client documentation`_.
 InfluxQL
 --------
 
-If you need to query the EFD using InfluxQL you can instantiate the underlying `aioinflux`_ with:
+To perform queries directly using InfluxQL, you can make use of the ``influx_client.query()`` method in conjunction with the EFD client.
+
+For a comprehensive understanding of the InfluxQL query syntax, we recommend referring to the `InfluxQL documentation`_.
 
 .. code::
 
    from lsst_efd_client import EfdClient
    efd = EfdClient("usdf_efd")
 
-   query = '''SELECT url, id FROM "lsst.sal.Electrometer.logevent_largeFileObjectAvailable" WHERE time > '2023-04-20' '''
+   query = '''SELECT vacuum FROM "lsst.sal.ATCamera.vacuum" WHERE time > '2023-04-20' '''
 
-   await efd.influx_client.query(query)
-
+   await client.influx_client.query(query)
 
 InfluxQL is picky about `single vs. double quotes`_.
 The rule of thumb is to use double quotes around topic names that have special characters like ``.`` and single quotes around timestamps.
@@ -48,9 +49,31 @@ Use the ``now()`` function to query data with time relative the current time in 
 
 .. code::
 
-   query = '''SELECT url, id FROM "lsst.sal.Electrometer.logevent_largeFileObjectAvailable" WHERE time > now() - 30d '''
+   query = '''SELECT vacuum FROM "lsst.sal.ATCamera.vacuum" WHERE time > now() - 6h '''
 
-Read more about the InfluxQL query syntax in the `InfluxQL documentation`_.
+
+Example notebooks
+-----------------
+
+.. grid:: 3
+
+   .. grid-item-card:: Querying the EFD with InfluxQL
+      :link: notebooks/UsingInfluxQL.ipynb
+      :link-type: url
+
+      Learn how to use the EFD client and InfluxQL to query EFD data.
+
+   .. grid-item-card:: Downsampling data with the GROUP BY time() clause
+      :link: notebooks/Downsampling.ipynb
+      :link-type: url
+
+      Learn how to downsample data with InfluxQL.
+
+   .. grid-item-card:: Chunked queries: Efficient Data Retrieval
+      :link: notebooks/ChunkedQueries.ipynb
+      :link-type: url
+
+      Learn how to retuen chunked responses with the EFD client.
 
 .. _single vs. double quotes: https://www.influxdata.com/blog/tldr-influxdb-tech-tips-july-21-2016/
 .. _InfluxQL documentation: https://docs.influxdata.com/influxdb/v1.8/query_language/explore-data/
