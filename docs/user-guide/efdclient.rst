@@ -58,22 +58,22 @@ Example notebooks
 .. grid:: 3
 
    .. grid-item-card:: Querying the EFD with InfluxQL
-      :link: notebooks/UsingInfluxQL.ipynb
+      :link: https://github.com/lsst-sqre/sasquatch/blob/main/docs/user-guide/notebooks/UsingInfluxQL.ipynb
       :link-type: url
 
       Learn how to use the EFD client and InfluxQL to query EFD data.
 
    .. grid-item-card:: Downsampling data with the GROUP BY time() clause
-      :link: notebooks/Downsampling.ipynb
+      :link: https://github.com/lsst-sqre/sasquatch/blob/main/docs/user-guide/notebooks/Downsampling.ipynb
       :link-type: url
 
       Learn how to downsample data with InfluxQL.
 
    .. grid-item-card:: Chunked queries: Efficient Data Retrieval
-      :link: notebooks/ChunkedQueries.ipynb
+      :link: https://github.com/lsst-sqre/sasquatch/blob/main/docs/user-guide/notebooks/ChunkedQueries.ipynb
       :link-type: url
 
-      Learn how to retuen chunked responses with the EFD client.
+      Learn how to return chunked responses with the EFD client.
 
 .. _single vs. double quotes: https://www.influxdata.com/blog/tldr-influxdb-tech-tips-july-21-2016/
 .. _InfluxQL documentation: https://docs.influxdata.com/influxdb/v1.8/query_language/explore-data/
