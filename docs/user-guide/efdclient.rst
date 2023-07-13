@@ -12,9 +12,9 @@ For example, at the USDF environment you can instantiate the EFD client using:
 .. code::
 
    from lsst_efd_client import EfdClient
-   efd = EfdClient("usdf_efd")
+   client = EfdClient("usdf_efd")
 
-   await efd.get_topics()
+   await client.get_topics()
 
 where ``usdf_efd`` is an alias to the :ref:`environment <environments>`.
 It helps to discover the InfluxDB API URL and the credentials to connect to the EFD database.
@@ -36,7 +36,7 @@ For a comprehensive understanding of the InfluxQL query syntax, we recommend ref
 .. code::
 
    from lsst_efd_client import EfdClient
-   efd = EfdClient("usdf_efd")
+   client = EfdClient("usdf_efd")
 
    query = '''SELECT vacuum FROM "lsst.sal.ATCamera.vacuum" WHERE time > '2023-04-20' '''
 
