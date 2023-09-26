@@ -95,8 +95,10 @@ Intended audience: Telescope & Site team.
 - Kafdrop UI: ``https://tucson-teststand.lsst.codes/kafdrop``
 - Kafka bootstrap server: ``sasquatch-tts-kafka-bootstrap.lsst.codes:9094``
 - Schema Registry:
+
   - ``http://sasquatch-schema-registry.sasquatch:8081`` (cluster internal)
   - ``https://tucson-teststand.lsst.codes/schema-registry`` (cluster external)
+
 - Kafka REST proxy API: ``https://tucson-teststand.lsst.codes/sasquatch-rest-proxy``
 
 .. _bts:
