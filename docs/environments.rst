@@ -19,13 +19,16 @@ The table below summarizes the Sasquatch environments and their main entry point
 +---------------------------+---------------------------------------------------+-----------------------------------+----------------+
 | :ref:`TTS<tts>`           | https://tucson-teststand.lsst.codes/chronograf    | ``tucson_teststand_efd``          | NOIRLab VPN    |
 +---------------------------+---------------------------------------------------+-----------------------------------+----------------+
-| :ref:`BTS<bts>`           | https://base-lsp.lsst.codes/chronograf [#f1]_     | ``base_efd``, ``summit_efd_copy`` | Chile VPN      |
+| :ref:`BTS<bts>`           | https://base-lsp.lsst.codes/chronograf            | ``base_efd``                      | Chile VPN      |
 +---------------------------+---------------------------------------------------+-----------------------------------+----------------+
+| :ref:`IDF<idf>`           | https://data-int.lsst.cloud/chronograf            | ``idf_efd`` [#f1]_                | Not required   |
++---------------------------+---------------------------------------------------+-----------------------------------+----------------+
+
 
 .. rubric:: Footnotes
 
-.. [#f1] The default Chronograf organization at BTS gives access to simulated data.
-         Switch to the "Summit EFD copy" organization to access Summit EFD data from Chronograf at BTS.
+.. [#f1] (NEW) The IDF environment is meant to be a short-term solution to serve historical EFD data until we can restore data at USDF.
+  For real-time analysis of the EFD, please use the USDF environment.
 
 .. _summit:
 
@@ -33,11 +36,9 @@ Summit
 ------
 
 Sasquatch production environemtn at the Summit.
+This instance collects engineering data from the Summit and is the primary source of EFD data.
 
-Intended audience: Observers and Commissioning team.
-
-.. note::
-   The Summit EFD database is also available from USDF.
+Intended audience: Observers and Commissioning team at the Summit
 
 
 - Chronograf: ``https://summit-lsp.lsst.codes/chronograf``
@@ -53,6 +54,7 @@ USDF
 ----
 
 Sasquatch production environment at the USDF.
+This instance has EFD data replicated in real-time from the Summit.
 
 Intended audience: Project staff.
 
@@ -116,3 +118,16 @@ Intended audience: Telescope & Site team.
 - Kafka bootstrap server: ``sasquatch-base-kafka-bootstrap.lsst.codes:9094``
 - Schema Registry: ``http://sasquatch-schema-registry.sasquatch:8081`` (cluster internal only)
 - Kafka REST proxy API: ``https://base-lsp.lsst.codes/sasquatch-rest-proxy``
+
+
+.. _idf:
+
+IDF
+---
+
+The IDF environment is meant to be a short-term solution to serve historical EFD data until we can restore data at USDF.
+For real-time analysis of the EFD, please use the USDF environment.
+
+Intended audience: Project staff.
+
+- Chronograf: ``https://data-int.lsst.cloud/chronograf``
