@@ -17,8 +17,9 @@ In Sasquatch, the EFD topics fall under the ``lsst.sal`` namespace, with their s
 Relative throughput of EFD topics
 ---------------------------------
 
-We use a Sankey diagram to depict the data flowing from the CSCs (source) to the Kafka topics (target) by looking at the size of each topic in Kafka (value) for `telemetry`_ and `events`_.
-The value is represented by the thickness of the line connecting a CSC to a Kafka topic. Whe show topics larger than 10KB only.
+We employ a Sankey diagram to depict the data flow originated from the CSCs (source) to the Kafka topics (target) by looking at the size of each topic in Kafka (value) for `telemetry`_ and `events`_ topics. The thickness of the line connecting a CSC to a Kafka topic represents the relative throuput. 
+
+Note that only Kafka topics larger than 10KB are included in the visualization. 
 
 This diagnostic helped us to identify an excessive amount of data flowing to the ``MTM1M3.logevent_forceActuatorWarning-0`` topic.
 
