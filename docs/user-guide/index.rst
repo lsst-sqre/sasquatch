@@ -12,6 +12,11 @@ User guide
     Working with timestamps <timestamps>
 
 .. toctree::
+    :caption: Analysis Tools metrics
+
+    Overview <analysistools>
+
+.. toctree::
     :caption: Data exploration and visualization with Chronograf
 
     Overview <chronograf>

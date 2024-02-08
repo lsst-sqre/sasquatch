@@ -1,6 +1,6 @@
 [project]
 title = "sasquatch"
-copyright = "2023 Association of Universities for Research in Astronomy, Inc. (AURA)"
+copyright = "2024 Association of Universities for Research in Astronomy, Inc. (AURA)"
 
 [project.python]
 package = "sasquatch"
@@ -11,8 +11,9 @@ disable_primary_sidebars = [
     "index",
     "changelog",
 ]
-extensions = ["sphinxcontrib.youtube"]
-
+extensions = [
+    "sphinxcontrib.youtube",
+]
 
 [sphinx.intersphinx.projects]
 python = "https://docs.python.org/3/"
