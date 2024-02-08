@@ -14,43 +14,34 @@ name: Docs
       - "renovate/**"
       - "tickets/**"
       - "u/**"
-    tags:
-      - "*"
-  workflow_dispatch: {}
+  release:
+    types: [published]
 
 jobs:
+
   docs:
+
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Print GitHub event name
-        run: echo "${{ github.event_name }}"
-
-      - name: Filter paths
-        uses: dorny/paths-filter@v2
-        id: filter
+      - uses: actions/checkout@v4
         with:
-          filters: |
-            docs:
-              - ".github/workflows/docs.yaml"
-              - "docs/**"
+          fetch-depth: 0 # full history for setuptools_scm
 
-      - name: Install graphviz
-        if: steps.filter.outputs.docs == 'true'
+      - name: Install Graphviz
         run: sudo apt-get install graphviz
 
-      - name: Build docs
-        if: steps.filter.outputs.docs == 'true'
+      - name: Run tox
         uses: lsst-sqre/run-tox@v1
         with:
-          python-version: "3.11"
-          tox-envs: docs
+          python-version: "3.10"
+          tox-envs: "docs"
+          # Add docs-linkcheck when the docs and PyPI package are published
+          # tox-envs: "docs,docs-linkcheck"
 
       # Only attempt documentation uploads for tagged releases and pull
-      # requests from ticket branches in the same repository. This avoids
+      # requests from ticket branches in the same repository.  This avoids
       # version clutter in the docs and failures when a PR doesn't have access
       # to secrets.
       - name: Upload to LSST the Docs
@@ -60,8 +51,7 @@ jobs:
           dir: "docs/_build/html"
           username: ${{ secrets.LTD_USERNAME }}
           password: ${{ secrets.LTD_PASSWORD }}
-        if: >-
-          steps.filter.outputs.docs == 'true'
-          && github.event_name != 'merge_group'
+        if: >
+          github.event_name != 'merge_group'
           && (github.event_name != 'pull_request'
               || startsWith(github.head_ref, 'tickets/'))

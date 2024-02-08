@@ -6,3 +6,5 @@ venv
 src/sasquatch.egg-info
 .tox
 .DS_Store
+docs/user-guide/phalanx.code-workspace
+src/sasquatch/__pycache__

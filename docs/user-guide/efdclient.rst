@@ -5,9 +5,9 @@
 The EFD Python client
 #####################
 
-The EFD Python client is based on `aioinflux`_  an asyncio client to access EFD data from a notebook in the RSP.
+The EFD Python client provides convenience methods for accessing EFD data.
 
-For example, at the USDF environment you can instantiate the EFD client using:
+For example, at USDF you can instantiate the EFD client using:
 
 .. code::
 
@@ -17,14 +17,11 @@ For example, at the USDF environment you can instantiate the EFD client using:
    await client.get_topics()
 
 where ``usdf_efd`` is an alias to the :ref:`environment <environments>`.
-It helps to discover the InfluxDB API URL and the credentials to connect to the EFD database.
+It helps to discover the InfluxDB API URL and the credentials to connect to Sasquatch.
 
-The EFD Python client provides convenience methods for accessing EFD data.
 Read more about the methods available in the `EFD client documentation`_.
 
 .. _EFD client documentation: https://efd-client.lsst.io
-.. _aioinflux: https://aioinflux.readthedocs.io/en/stable/
-
 
 InfluxQL
 --------
