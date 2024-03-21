@@ -59,7 +59,7 @@ This instance has EFD data replicated in real-time from the Summit.
 Intended audience: Project staff.
 
 - Chronograf: ``https://usdf-rsp.slac.stanford.edu/chronograf``
-- InfluxDB HTTP API: ``https://usdf-rsp.slac.stanford.edu/influxdb``
+- InfluxDB HTTP API: ``https://usdf-rsp.slac.stanford.edu/influxdb-enterprise-data``
 - Kafdrop UI: ``https://usdf-rsp.slac.stanford.edu/kafdrop``
 - Kafka boostrap server:
   (not yet available)
