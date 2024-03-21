@@ -128,14 +128,6 @@ In Chronograf, tables are linked to charts via the time column.
 
 .. _log viewer: https://docs.influxdata.com/chronograf/v1.10/guides/analyzing-logs/
 
-
-Chronograf shared account
-=========================
-
-The ``chronograf-viewer`` shared account is meant to be used for the Observatory control room displays, the password can be found in LSST IT/SQuaRE 1Password or
-you can ask for it in the support channel ``#com-square-support`` on Slack.
-
-
 .. _advanced:
 
 Advanced dashboards with Flux
