@@ -27,10 +27,10 @@ The table below summarizes the Sasquatch environments and their main entry point
 Summit
 ------
 
-Sasquatch production environemtn at the Summit.
+Sasquatch production environment at the Summit.
 This instance collects engineering data from the Summit and is the primary source of EFD data.
 
-Intended audience: Observers and Commissioning team at the Summit
+Intended audience: Observers and the Commissioning team at the Summit
 
 
 - Chronograf: ``https://summit-lsp.lsst.codes/chronograf``
