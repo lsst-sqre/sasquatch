@@ -21,24 +21,16 @@ The table below summarizes the Sasquatch environments and their main entry point
 +---------------------------+---------------------------------------------------+-----------------------------------+----------------+
 | :ref:`BTS<bts>`           | https://base-lsp.lsst.codes/chronograf            | ``base_efd``                      | Chile VPN      |
 +---------------------------+---------------------------------------------------+-----------------------------------+----------------+
-| :ref:`IDF<idf>`           | https://data-int.lsst.cloud/chronograf            | ``idf_efd`` [#f1]_                | Not required   |
-+---------------------------+---------------------------------------------------+-----------------------------------+----------------+
-
-
-.. rubric:: Footnotes
-
-.. [#f1] (NEW) The IDF environment is meant to be a short-term solution to serve historical EFD data until we can restore data at USDF.
-  For real-time analysis of the EFD, please use the USDF environment.
 
 .. _summit:
 
 Summit
 ------
 
-Sasquatch production environemtn at the Summit.
+Sasquatch production environment at the Summit.
 This instance collects engineering data from the Summit and is the primary source of EFD data.
 
-Intended audience: Observers and Commissioning team at the Summit
+Intended audience: Observers and the Commissioning team at the Summit
 
 
 - Chronograf: ``https://summit-lsp.lsst.codes/chronograf``
