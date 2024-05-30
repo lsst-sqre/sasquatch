@@ -5,16 +5,14 @@ User guide
 ##########
 
 .. toctree::
-    :caption: Observatory telemetry (EFD)
+    :caption: Accessing data
 
-    Overview <observatorytelemetry>
+    Observatory telemetry (EFD) <observatorytelemetry>
     The EFD Python client <efdclient>
     Working with timestamps <timestamps>
+    Analysis Tools metrics <analysistools>
 
-.. toctree::
-    :caption: Analysis Tools metrics
-
-    Overview <analysistools>
+    The InfluxDB API <influxdbapi>
 
 .. toctree::
     :caption: Data exploration and visualization with Chronograf
@@ -37,7 +35,7 @@ User guide
 
     Overview <sendingdata>
     Namespaces <namespaces>
-    Avro and Schema Evolution <avro>
+    Avro schemas <avro>
     Kafka REST Proxy <restproxy>
     Kafdrop <kafdrop>
 

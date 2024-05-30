@@ -1,14 +1,14 @@
 .. _analysis-tools:
 
-########
-Overview
-########
+######################
+Analysis Tools metrics
+######################
 
-The `Analysis Tools`_ package is used to create QA metrics from the `LSST Pipelines`_ outputs.
+The `Analysis Tools`_ package is used to create science performance metrics from the `LSST Pipelines`_ outputs.
 
-Currently, the Analysis Tools metrics are dispatched to the ``usdfdev_efd`` Sasquatch environment under the ``lsst.dm`` namespace.
+Currently, the Analysis Tools metrics are dispatched to the ``usdfdev_efd`` environment under the ``lsst.dm`` namespace.
 
-The EFD Python client can be used to query these metrics.
+The :ref:`EFD Python client <efdclient>` can be used to query them.
 
 For example, to get the list of analysis tools in the ``lsst.dm`` namespace, you can use:
 
