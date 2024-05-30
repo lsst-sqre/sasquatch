@@ -6,7 +6,6 @@ copyright = "2024 Association of Universities for Research in Astronomy, Inc. (A
 package = "sasquatch"
 
 [sphinx]
-rst_epilog_file = "_rst_epilog.rst"
 disable_primary_sidebars = [
     "index",
     "changelog",

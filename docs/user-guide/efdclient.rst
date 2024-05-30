@@ -5,9 +5,12 @@
 The EFD Python client
 #####################
 
-The EFD Python client provides convenience methods for accessing EFD data.
+The EFD client built on top of the `aioinflux`_ library and provides a high-level API to interact with the EFD.
 
-For example, at USDF you can instantiate the EFD client using:
+The EFD client is designed to be used in the RSP notebook aspect.
+For services that need to access the EFD, see how to query the :ref:`InfluxDB API <influxdbapi>` directly.
+
+For example, from a notebook running at the `USDF RSP`_ you can instantiate the EFD client using:
 
 .. code::
 
@@ -16,12 +19,14 @@ For example, at USDF you can instantiate the EFD client using:
 
    await client.get_topics()
 
-where ``usdf_efd`` is an alias to the :ref:`environment <environments>`.
-It helps to discover the InfluxDB API URL and the credentials to connect to Sasquatch.
+``usdf_efd`` is an alias for the InfluxDB instance at USDF. With that the EFD client discovers the InfluxDB URL, database and credentials to connect to that
+environment.
 
-Read more about the methods available in the `EFD client documentation`_.
+If you are using the EFD client on another environment, see the corresponding alias in the :ref:`environments <environments>` page.
 
-.. _EFD client documentation: https://efd-client.lsst.io
+Learn more about the methods available in the `documentation`_.
+
+.. _documentation: https://efd-client.lsst.io
 
 InfluxQL
 --------
@@ -72,5 +77,7 @@ Example notebooks
 
       Learn how to return chunked responses with the EFD client.
 
+.. _aioinflux: https://aioinflux.readthedocs.io/
+.. _USDF RSP: https://usdf-rsp.slac.stanford.edu/
 .. _single vs. double quotes: https://www.influxdata.com/blog/tldr-influxdb-tech-tips-july-21-2016/
 .. _InfluxQL documentation: https://docs.influxdata.com/influxdb/v1.8/query_language/explore-data/

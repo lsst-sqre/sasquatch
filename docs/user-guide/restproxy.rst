@@ -16,11 +16,11 @@ To send data to Sasquatch, first, you need to :ref:`create-a-kafka-topic` for yo
 
 .. note::
 
-    Kafka topics must be created with the right :ref:`namespace prefix <namespaces>` to be added to the Kafka REST Proxy API.
+    Kafka topics must be created with the right :ref:`namespace prefix <namespaces>` to be recognized by the Kafka REST Proxy.
 
-Use ``/topics`` in the Kafka REST Proxy API to list the available topics.
 
 At USDF dev, for example, the endpoint for the ``lsst.example.skyFluxMetric`` Kafka topic is https://usdf-rsp-dev.slac.stanford.edu/sasquatch-rest-proxy/topics/lsst.example.skyFluxMetric from which you can see the topic configuration in Kafka.
+And Kafdrop can be used to visualize the Kafka topics and messages https://usdf-rsp-dev.slac.stanford.edu/kafdrop/topic/lsst.example.skyFluxMetric
 
 
 Send data via the Kafka REST Proxy API
@@ -47,15 +47,13 @@ From the example in the previous section, the request body in JSON would be:
 	]
     }
 
-Note that the Avro schema needs to be stringified, that's required when sending the Avro schema via the REST Proxy API.
+Note that the Avro schema needs to be stringified, that's required when embeding the Avro schema in the JSON payload.
 
 .. note::
+    By default Sasquatch assumes every message contains a ``timestamp`` field of type ``long`` with Unix timestamps in microseconds precision.
+    Another option is to use Avro type ``double`` and specify the Unix epoch timestamps in seconds.
 
-    Sasquatch accepts Unix epoch timestamps with Avro type ``long``, for example, ``1681248783342569``.
-    Another option is to use Avro type ``double`` and specify the Unix epoch timestamps in seconds, for example, ``1681248783.342569``.
-    By default Sasquatch assumes timestamps in microsseconds precision.
-
-    See :ref:`connectors` for selecting the timestamp field to use as the InfluxDB time and configuring the timestamp precision.
+    See :ref:`connectors` for selecting the timestamp field and configuring the timestamp format options.
 
 In addition to the request body, you need the ``Content-type`` and ``Accept`` headers to indicate an HTTP request that contains an Avro payload encoded in JSON and compatible with the REST Proxy v2 API.
 
@@ -96,29 +94,14 @@ A code snippet in Python for sending data to the ``lsst.example.skyFluxMetric`` 
 
     response = requests.request("POST", url, json=payload, headers=headers)
 
-    print(response.text)
-
 The REST Proxy will register the schema with the Schema Registry.
 If the schema is already registered, the REST Proxy will check the schema compatibility before sending data to Kafka.
 
-Note that from the HTTP response, you can get the schema ID and re-use it for subsequent requests.
+A successful response will contain the offset of the record in the Kafka topic.
 
-.. code:: json
+Learn more about the Kafka REST Proxy API in the `Confluent documentation`_.
 
-    {
-	"value_schema_id": 213
-	"records": [
-		{
-			"value": {
-				"timestamp": 1681248783000000,
-				"band": "y",
-				"instrument": "LSSTCam-imSim",
-				"meanSky": -213.75839364883444,
-				"stdevSky": 2328.906118708811
-			}
-		}
-	]
-    }
+.. _Confluent documentation: https://docs.confluent.io/platform/current/kafka-rest/
 
 .. _create-a-kafka-topic:
 
@@ -163,5 +146,4 @@ Then make a ``POST`` request to the ``/topics`` endpoint:
 
 That creates the ``lsst.example.skyFluxMetric`` Kafka topic with one partition and three replicas, one for each broker in the cluster.
 
-.. _namespaces:
 
