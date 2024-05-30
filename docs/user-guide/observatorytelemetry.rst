@@ -1,8 +1,8 @@
 .. _observatory-telemetry:
 
-########
-Overview
-########
+###########################
+Observatory telemetry (EFD)
+###########################
 
 Rubin Observatory generates a large amount of engineering data, which is stored in the Engineering and Facilities Database (EFD).
 
