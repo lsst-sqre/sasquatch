@@ -51,7 +51,7 @@ A simple Avro schema for this metric would look like this:
         ]
     }
 
-The :ref:`namespace <namespaces>` and the the metric name are used to create the full qualified metric name in Sasquatch, ``lsst.example.skyFluxMetric``, which also corresponds to the Kafka topic name.
+The :ref:`namespace <namespaces>` and the metric name are used to create the full qualified metric name in Sasquatch, ``lsst.example.skyFluxMetric``, which also corresponds to the Kafka topic name.
 The schema is stored in the Schema Registry and is used to validate the data sent to Sasquatch.
 
 Read more about Avro schemas and types in the `Avro specification`_.
