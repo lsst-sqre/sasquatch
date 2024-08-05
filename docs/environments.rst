@@ -37,7 +37,7 @@ Intended audience: Observers and the Commissioning team at the Summit
 - InfluxDB HTTP API: ``https://summit-lsp.lsst.codes/influxdb``
 - Kafdrop UI: ``https://summit-lsp.lsst.codes/kafdrop``
 - Kafka bootstrap server: ``sasquatch-summit-kafka-bootstrap.lsst.codes:9094``
-- Schema Registry: ``http://sasquatch-schema-registry.sasquatch:8081`` (cluster internal only)
+- Schema Registry: ``http://sasquatch-schema-registry.sasquatch:8081`` (cluster internal)
 - Kafka REST proxy API: ``https://summit-lsp.lsst.codes/sasquatch-rest-proxy``
 
 .. _usdf:
@@ -55,7 +55,7 @@ Intended audience: Project staff.
 - Kafdrop UI: ``https://usdf-rsp.slac.stanford.edu/kafdrop``
 - Kafka boostrap server:
   (not yet available)
-- Schema Registry: ``http://sasquatch-schema-registry.sasquatch:8081`` (cluster internal only)
+- Schema Registry: ``http://sasquatch-schema-registry.sasquatch:8081`` (cluster internal)
 - Kafka REST proxy API: ``https://usdf-rsp.slac.stanford.edu/sasquatch-rest-proxy``
 
 .. _usdfdev:
@@ -72,7 +72,7 @@ Intended audience: Project staff.
 - Kafdrop UI: ``https://usdf-rsp-dev.slac.stanford.edu/kafdrop``
 - Kafka boostrap server:
   (not yet available)
-- Schema Registry: ``http://sasquatch-schema-registry.sasquatch:8081`` (cluster internal only)
+- Schema Registry: ``http://sasquatch-schema-registry.sasquatch:8081`` (cluster internal)
 - Kafka REST proxy API: ``https://usdf-rsp-dev.slac.stanford.edu/sasquatch-rest-proxy``
 
 .. _tts:
@@ -88,11 +88,7 @@ Intended audience: Telescope & Site team.
 - InfluxDB HTTP API: ``https://tucson-teststand.lsst.codes/influxdb``
 - Kafdrop UI: ``https://tucson-teststand.lsst.codes/kafdrop``
 - Kafka bootstrap server: ``sasquatch-tts-kafka-bootstrap.lsst.codes:9094``
-- Schema Registry:
-
-  - ``http://sasquatch-schema-registry.sasquatch:8081`` (cluster internal)
-  - ``https://tucson-teststand.lsst.codes/schema-registry`` (cluster external)
-
+- Schema Registry: ``http://sasquatch-schema-registry.sasquatch:8081`` (cluster internal)
 - Kafka REST proxy API: ``https://tucson-teststand.lsst.codes/sasquatch-rest-proxy``
 
 .. _bts:
@@ -108,9 +104,8 @@ Intended audience: Telescope & Site team.
 - InfluxDB HTTP API: ``https://base-lsp.lsst.codes/influxdb``
 - Kafdrop UI: ``https://base-lsp.lsst.codes/kafdrop``
 - Kafka bootstrap server: ``sasquatch-base-kafka-bootstrap.lsst.codes:9094``
-- Schema Registry: ``http://sasquatch-schema-registry.sasquatch:8081`` (cluster internal only)
+- Schema Registry: ``http://sasquatch-schema-registry.sasquatch:8081`` (cluster internal)
 - Kafka REST proxy API: ``https://base-lsp.lsst.codes/sasquatch-rest-proxy``
-
 
 .. _idf:
 
