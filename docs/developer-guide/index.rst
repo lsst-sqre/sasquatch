@@ -15,6 +15,7 @@ A Sasquatch developer is responsible for maintaining the architecture components
    :caption: Procedures
 
    broker-migration
+   connectors
    
 .. toctree::
    :caption: Troubleshooting

@@ -38,9 +38,3 @@ User guide
     Avro schemas <avro>
     Kafka REST Proxy <restproxy>
     Kafdrop <kafdrop>
-
-..  toctree::
-    :caption: Kafka Connect
-
-    Overview <kafkaconnect>
-    InfluxDB Sink <influxdbsink>
