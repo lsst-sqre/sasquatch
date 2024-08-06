@@ -3,7 +3,7 @@ Developer guide
 ###############
 
 This part of the Sasquatch documentation contains information primarily of interest to developers of Sasquatch itself.
-A Sasquatch developer is responsible for maintaining the architecture components and the application deployments.
+A Sasquatch developer is responsible for maintaining the Sasquatch components and its deployments.
 
 
 .. toctree::
