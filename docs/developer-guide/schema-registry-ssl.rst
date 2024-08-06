@@ -9,7 +9,7 @@ Sasquatch Schema Registry pod cannot start and ends up in ``CrashLoopBackOff`` s
 Kafka brokers show an ``org.apache.kafka.common.errors.SslAuthenticationException``.
 
 **Cause:**
-The Schema Registry Operator cannot recreate its JKS secret when Strimzi rotates the cluster certificates. 
+The Schema Registry Operator cannot recreate its JKS secret when Strimzi rotates the cluster certificates.
 
 **Solution:**
 Use this procedure in Argo CD to force Schema Registry Operator to create the JKS secret:
