@@ -12,7 +12,7 @@ User guide
     Working with timestamps <timestamps>
     Analysis Tools metrics <analysistools>
 
-    The InfluxDB API <influxdbapi>
+    Querying the InfluxDB v1 API <influxdbapi>
 
 .. toctree::
     :caption: Data exploration and visualization with Chronograf
@@ -38,9 +38,3 @@ User guide
     Avro schemas <avro>
     Kafka REST Proxy <restproxy>
     Kafdrop <kafdrop>
-
-..  toctree::
-    :caption: Kafka Connect
-
-    Overview <kafkaconnect>
-    InfluxDB Sink <influxdbsink>
