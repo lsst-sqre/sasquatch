@@ -32,6 +32,12 @@ Upgrading the Kafka brokers and client applications in Sasquatch (Kafka Connect 
 
 Note that you do not explicitly set the Kafka ``metadataVersion`` in Sasquatch; instead, Strimzi automatically updates it to the current default after you update the Kafka version.
 
+.. note::
+
+    When upgrading Kafka from an unsupported version to a supported version, an outage will occur during the upgrade of the second broker.
+    This happens because, while the first broker will be running the new version supported by the operator, the third broker will still be on an unsupported version.
+    Since Sasquatch requires a minimum of two in-sync replicas for each Kafka topic, this mismatch causes the outage.
+
 Refer to the `Strimzi documentation`_ for more details.
 
 .. _latest version of the operator: https://strimzi.io/downloads/
