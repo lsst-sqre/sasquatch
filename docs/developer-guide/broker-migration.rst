@@ -1,19 +1,20 @@
 .. _broker-migration:
 
-#######################################
-Kafka broker migration to local storage
-#######################################
+######################
+Kafka broker migration
+######################
 
-From time to time, you might need to expand the size of the Kafka storage because your brokers need to handle more data, or you might need to migrate the kafka brokers to a different storage that uses a different storage class.
+From time to time, you may need to expand the size of your Kafka storage because your brokers need to handle more data, or you might need to migrate your Kafka brokers to a different storage that uses a new storage class.
 
 In Strimzi, each ``kafkaNodePool`` has its own storage configuration.
-The first step for the broker migration is creating a new ``KafkaNodePool`` with the new storage configuration.
-Once that's done you can use the Cruise Control tool and the Strimzi ``KafkaRebalance`` resource to move the data from the old brokers to the new brokers.
+The first step in the broker migration process is to create a new ``KafkaNodePool`` with the updated storage configuration.
+Once you’ve done this, you can use the Cruise Control tool along with the Strimzi ``KafkaRebalance`` resource to transfer data from the old brokers to the new ones.
 
-The procedure is outlined in the `Kafka Node Pools Storage & Scheduling`_ post adapted here to migrate the Kafka brokers originally deployed on the cluster default storage (usually a network attached storage) to local storage.
+This guide documents the procedure for migrating Kafka brokers that were originally deployed using the cluster's default storage class to a new storage class.
+This procedure is adapted from the `Kafka Node Pools Storage & Scheduling`_ Strimzi blog post.
 
-First make sure to enable Cruise Control in your Sasquatch Phalanx environment.
-Look in ``sasquatch/values-<environment>.yaml`` for:
+Before you begin the broker migration, ensure that Cruise Control is enabled in your Sasquatch Phalanx environment.
+Check your ``sasquatch/values-<environment>.yaml`` file for the following:
 
 .. code:: yaml
 
@@ -21,11 +22,11 @@ Look in ``sasquatch/values-<environment>.yaml`` for:
     cruiseControl:
       enabled: true
 
-Then, specify the storage class for local storage and its size and set ``migration.enabled: true`` to start the migration.
+To migrate your Kafka brokers to a new storage class, you need to specify the storage class name and the size, then set ``brokerStorage.migration.enabled: true`` to initiate the migration.
 
 .. code:: yaml
 
-  localStorage:
+  brokerStorage:
     storageClassName: zfs--rubin-efd
     size: 1.5Ti
     enabled: false
@@ -34,15 +35,15 @@ Then, specify the storage class for local storage and its size and set ``migrati
       rebalance: false
 
 
-This will create a new ``KafkaNodePool`` resource for the brokers on local storage.
+This configuration creates a new ``KafkaNodePool`` resource for the brokers using the new storage class. 
 Sync the new ``KafkaNodePool`` resource in Argo CD.
 
-At this point, the data is still in the old brokers and the new ones are empty.
-Now use Cruise Control to move the data by setting ``migration.rebalance: true`` and specifying the IDs of the old brokers, the ones to be removed after the migration.
+At this point, your data will still reside on the old brokers, and the new ones will be empty.
+To move the data, use Cruise Control by setting ``brokerStorage.migration.rebalance: true`` and specifying the IDs of the old brokers — the ones you plan to remove after the migration.
 
 .. code:: yaml
 
-  localStorage:
+  brokerStorage:
     storageClassName: zfs--rubin-efd
     size: 1.5Ti
     enabled: false
@@ -54,10 +55,10 @@ Now use Cruise Control to move the data by setting ``migration.rebalance: true``
         - 4
         - 5
 
-This will create a new ``KafkaRebalance`` resource that needs to be synced in Argo CD.
+This action will create a new ``KafkaRebalance`` resource, which you’ll need to sync in Argo CD.
 
-Now, we have to wait until Cruise Control executes the cluster rebalance.
-You can check state of the rebalance by looking at the ``KafkaRebalance`` resource:
+Next, wait for Cruise Control to execute the cluster rebalance.
+You can check the state of the rebalance by inspecting the ``KafkaRebalance`` resource:
 
 .. code:: bash
 
@@ -65,12 +66,12 @@ You can check state of the rebalance by looking at the ``KafkaRebalance`` resour
     NAME               CLUSTER     PENDINGPROPOSAL   PROPOSALREADY   REBALANCING   READY   NOTREADY   STOPPED
     broker-migration   sasquatch                                                   True
 
-Finally, once the rebalancing state is ready, set ``localStorage.enabled: true`` and ``migration.enabled: false`` and ``migration.rebalance: false``.
+Finally, once the rebalancing state is ready, set ``brokerStorage.enabled: true`` and ``brokerStorage.migration.enabled: false`` and ``brokerStorage.migration.rebalance: false``.
 
-Note that the PVCs of the old brokers need to be deleted manually, as they are orphan resources in Sasquatch to prevent on-cascade deletion.
+Note that the PVCs of the old brokers need to be deleted manually, as they are orphan resources in Sasquatch. 
 
-Also note that Strimzi will assign new broker IDs for the recently created brokers.
-Make sure to update the broker IDs whenever they are used, for example, in the Kafka external listener configuration.
+Also, keep in mind that Strimzi will assign new broker IDs to the newly created brokers. 
+Ensure that you update the broker IDs wherever they are used, such as in the Kafka external listener configuration.
 
 
 .. _Kafka Node Pools Storage & Scheduling: https://strimzi.io/blog/2023/08/28/kafka-node-pools-storage-and-scheduling/
