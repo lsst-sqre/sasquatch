@@ -12,7 +12,7 @@ A Sasquatch developer is responsible for maintaining the Sasquatch components an
    architecture
 
 .. toctree::
-   :caption: Procedures
+   :caption: Guides
 
    strimzi-updates
    broker-migration
