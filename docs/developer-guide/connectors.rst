@@ -1,11 +1,15 @@
 .. _connectors:
 
-######################################
-Configuring an InfluxDB Sink connector
-######################################
+#################################
+Managing InfluxDB Sink connectors
+#################################
+
 
 An InfluxDB Sink connector consumes data from Kafka and writes to InfluxDB.
-Sasquatch uses the Telegraf `Kafka consumer input`_ and the `InfluxDB v1 output`_ plugins for that.
+Sasquatch uses the Telegraf `Kafka consumer input`_ plugin and the `InfluxDB v1 output`_ plugin for that.
+
+Configuration
+=============
 
 The connector configuration is specified per Sasquatch environment in ``sasquatch/values-<environment>.yaml``.
 
@@ -28,7 +32,7 @@ Here's what the connector configuration for writing data from the ``lsst.example
         replicaCount: 1
 
 Selecting Kafka topics
-======================
+----------------------
 
 ``kafkaConsumers.example.topicRegexps`` is a list of regular expressions used to specify the Kafka topics consumed by this connector, and ``KafkaConsumers.example.database`` is the name of the InfluxDB v1 database to write to.
 In this example, all Kafka topics prefixed by ``lsst.example`` are recorded in the ``lsst.example`` database in InfluxDB.
@@ -39,14 +43,14 @@ In this example, all Kafka topics prefixed by ``lsst.example`` are recorded in t
   Telegraf also records internal metrics from its input and output plugins in the same database.
 
 Timestamp
-=========
+---------
 
 InfluxDB, being a time-series database, requires a timestamp to index the data.
 The name of the field that contains the timestamp value and the timestamp format are specified by the ``kafkaConsumers.example.timestamp_field`` and
 ``kafkaConsumers.timestamp_format`` keys.
 
 Tags
-====
+----
 
 InfluxDB tags provide additional context when querying data.
 
@@ -70,13 +74,56 @@ For example, you might query the ``lsst.example.skyFluxMetric`` metric and group
 
 .. note::
 
-    In InfluxDB tags values are always strings.
-    Use an empty string when a tag value is missing.
-    Avoid tagging high cardinality fields such as IDs.
+  In InfluxDB tags values are always strings.
+  Use an empty string when a tag value is missing.
+  Avoid tagging high cardinality fields such as IDs.
 
 See `InfluxDB schema design and data layout`_ for more insights on how to design tags.
 
 See the `telegraf-kafka-consumer subchart`_ for additional configuration options.
+
+
+Deployment and scaling
+======================
+
+The connector is deployed as a Kubernetes deployment managed in Sasquatch by the
+
+
+See the `telegraf-kafka-consumer subchart`_ for additional configuration options.
+In Argo CD, sync the connector ConfigMap and the Deployment to deploy the connector.
+
+To scale a connector horizontally, increase the ``kafkaConsumers.<connector name>.replicaCount`` value in the ``sasquatch/values-<environment>.yaml`` file.
+
+.. note::
+
+  Note that scaling the connector horizontally only works if the Kafka topic has multiple partitions.
+  The number of topic partitions must be a multiple of the number of connector replicas. 
+  For example if your topic was created with 8 partitions, you can scale the connector to 1, 2, 4, or 8 replicas.
+
+Operations
+==========
+
+To list the connectors deployed in a Sasquatch environment, run:
+
+.. code:: bash
+
+  kubectl get deploy -l app=sasquatch-telegraf-kafka-consumer -n sasquatch
+
+To view the logs of a connector or multiple connectors run:
+
+.. code:: bash  
+
+  kubectl logs sasquatch-telegraf-kafka-consumer-<connector-name> -n sasquatch
+  kubectl logs -l app=sasquatch-telegraf-kafka-consumer --tail=5  -n sasquatch
+
+To stop a connector, run:
+
+.. code:: bash
+
+  kubectl scale deploy/sasquatch-telegraf-kafka-consumer-<connector-name> --replicas=0 -n sasquatch
+
+or permanently set the ``kafkaConsumers.<connector name>.enabled`` key to ``false`` in the ``sasquatch/values-<environment>.yaml`` file and sync the connector ConfigMap and the Deployment in Argo CD.
+
 
 .. _InfluxDB v1 output: https://github.com/influxdata/telegraf/blob/master/plugins/outputs/influxdb/README.md
 .. _Kafka consumer input: https://github.com/influxdata/telegraf/blob/master/plugins/inputs/kafka_consumer/README.md
