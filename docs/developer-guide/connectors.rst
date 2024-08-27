@@ -66,7 +66,7 @@ From the ``lsst.example.skyFluxMetric`` metric example:
         "stdevSky": 2328.906118708811,
     }
 
-``band`` and ``instrument`` are good candidates for tags, while ``meanSky`` and ``stdevSky`` are the fields associated to the ``lsst.example.skyFluxMetric`` metric.
+``band`` and ``instrument`` are good candidates for tags, while ``meanSky`` and ``stdevSky`` are measurements associated to the ``lsst.example.skyFluxMetric`` metric.
 Tags are specified in the ``kafkaConsumers.example.tags`` list which is the superset of the tags from all the Kafka topics consumed by this connector.
 
 In InfluxDB tags are indexed, you can use tags to efficiently aggregate and filter data in different ways.
@@ -86,11 +86,8 @@ See the `telegraf-kafka-consumer subchart`_ for additional configuration options
 Deployment and scaling
 ======================
 
-The connector is deployed as a Kubernetes deployment managed in Sasquatch by the
-
-
-See the `telegraf-kafka-consumer subchart`_ for additional configuration options.
-In Argo CD, sync the connector ConfigMap and the Deployment to deploy the connector.
+Connectors are deployed as Kubernetes Deployments by the `telegraf-kafka-consumer subchart`_.
+In Argo CD, sync the connector ConfigMap and the Deployment Kubernetes resources to deploy a connector.
 
 To scale a connector horizontally, increase the ``kafkaConsumers.<connector name>.replicaCount`` value in the ``sasquatch/values-<environment>.yaml`` file.
 
@@ -113,16 +110,16 @@ To view the logs of a connector or multiple connectors run:
 
 .. code:: bash  
 
-  kubectl logs sasquatch-telegraf-kafka-consumer-<connector-name> -n sasquatch
+  kubectl logs sasquatch-telegraf-<connector-name> -n sasquatch
   kubectl logs -l app=sasquatch-telegraf-kafka-consumer --tail=5  -n sasquatch
 
 To stop a connector, run:
 
 .. code:: bash
 
-  kubectl scale deploy/sasquatch-telegraf-kafka-consumer-<connector-name> --replicas=0 -n sasquatch
+  kubectl scale deploy/sasquatch-telegraf-<connector-name> --replicas=0 -n sasquatch
 
-or permanently set the ``kafkaConsumers.<connector name>.enabled`` key to ``false`` in the ``sasquatch/values-<environment>.yaml`` file and sync the connector ConfigMap and the Deployment in Argo CD.
+or set the ``kafkaConsumers.<connector name>.enabled`` key to ``false`` in the ``sasquatch/values-<environment>.yaml`` file and sync the connector ConfigMap and the Deployment Kubernetes resources in Argo CD.
 
 
 .. _InfluxDB v1 output: https://github.com/influxdata/telegraf/blob/master/plugins/outputs/influxdb/README.md
