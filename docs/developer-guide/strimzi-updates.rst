@@ -5,8 +5,8 @@
 Strimzi upgrades
 ################
 
-It is recommended that you perform incremental upgrades of the Strimzi operator as soon as new versions become available. 
-In Phalanx, dependabot will detect a new version of Strimzi. 
+It is recommended that you perform incremental upgrades of the Strimzi operator as soon as new versions become available.
+In Phalanx, dependabot will detect a new version of Strimzi.
 Once you merge the dependabot PR into the ``main`` branch, you can sync the Strimzi app in Argo CD.
 
 This operation will upgrade the operator to the latest version and will trigger a Kafka rollout in the namespaces watched by Strimzi.
@@ -23,7 +23,7 @@ See :ref:`kafka-upgrades` for instructions on upgrading Kafka.
 Kafka upgrades
 ==============
 
-Each Strimzi release supports a range of Kafka versions. 
+Each Strimzi release supports a range of Kafka versions.
 It is recommended that you always use the latest version of Kafka that is supported by the operator.
 
 Sasquatch deploys Kafka in KRaft mode.

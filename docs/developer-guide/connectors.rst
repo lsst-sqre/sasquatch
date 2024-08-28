@@ -6,7 +6,7 @@ Managing InfluxDB Sink connectors
 
 
 An InfluxDB Sink connector consumes data from Kafka and writes to InfluxDB.
-Sasquatch uses the Telegraf `Kafka consumer input`_ plugin and the `InfluxDB v1 output`_ plugin for that.
+Sasquatch uses the Telegraf `Kafka consumer input`_ plugin and the `InfluxDB v1 output`_ plugin implemented in the `telegraf-kafka-consumer`_ subchart.
 
 Configuration
 =============
@@ -30,6 +30,12 @@ Here's what the connector configuration for writing data from the ``lsst.example
         tags: |
           [ "band", "instrument" ]
         replicaCount: 1
+
+The following sections cover the most important configuration options using the ``lsst.example.skyFluxMetric`` metric as an example.
+
+See the `telegraf-kafka-consumer`_ subchart for the configuration options and default values.
+
+See the :ref:`avro` section to learn more about the ``lsst.example.skyFluxMetric`` example in Sasquatch.
 
 Selecting Kafka topics
 ----------------------
@@ -80,13 +86,9 @@ For example, you might query the ``lsst.example.skyFluxMetric`` metric and group
 
 See `InfluxDB schema design and data layout`_ for more insights on how to design tags.
 
-See the `telegraf-kafka-consumer subchart`_ for additional configuration options.
-
-
 Deployment and scaling
 ======================
 
-Connectors are deployed as Kubernetes Deployments by the `telegraf-kafka-consumer subchart`_.
 In Argo CD, sync the connector ConfigMap and the Deployment Kubernetes resources to deploy a connector.
 
 To scale a connector horizontally, increase the ``kafkaConsumers.<connector name>.replicaCount`` value in the ``sasquatch/values-<environment>.yaml`` file.
@@ -94,7 +96,7 @@ To scale a connector horizontally, increase the ``kafkaConsumers.<connector name
 .. note::
 
   Note that scaling the connector horizontally only works if the Kafka topic has multiple partitions.
-  The number of topic partitions must be a multiple of the number of connector replicas. 
+  The number of topic partitions must be a multiple of the number of connector replicas.
   For example if your topic was created with 8 partitions, you can scale the connector to 1, 2, 4, or 8 replicas.
 
 Operations
@@ -108,7 +110,7 @@ To list the connectors deployed in a Sasquatch environment, run:
 
 To view the logs of a connector or multiple connectors run:
 
-.. code:: bash  
+.. code:: bash
 
   kubectl logs sasquatch-telegraf-<connector-name> -n sasquatch
   kubectl logs -l app=sasquatch-telegraf-kafka-consumer --tail=5  -n sasquatch
@@ -125,4 +127,4 @@ or set the ``kafkaConsumers.<connector name>.enabled`` key to ``false`` in the `
 .. _InfluxDB v1 output: https://github.com/influxdata/telegraf/blob/master/plugins/outputs/influxdb/README.md
 .. _Kafka consumer input: https://github.com/influxdata/telegraf/blob/master/plugins/inputs/kafka_consumer/README.md
 .. _InfluxDB schema design and data layout: https://docs.influxdata.com/influxdb/v1/concepts/schema_and_data_layout
-.. _telegraf-kafka-consumer subchart: https://github.com/lsst-sqre/phalanx/tree/main/applications/sasquatch/charts/telegraf-kafka-consumer/README.md
+.. _telegraf-kafka-consumer: https://github.com/lsst-sqre/phalanx/tree/main/applications/sasquatch/charts/telegraf-kafka-consumer/README.md
