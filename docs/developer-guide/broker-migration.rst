@@ -35,7 +35,7 @@ To migrate your Kafka brokers to a new storage class, you need to specify the st
       rebalance: false
 
 
-This configuration creates a new ``KafkaNodePool`` resource for the brokers using the new storage class. 
+This configuration creates a new ``KafkaNodePool`` resource for the brokers using the new storage class.
 Sync the new ``KafkaNodePool`` resource in Argo CD.
 
 At this point, your data will still reside on the old brokers, and the new ones will be empty.
@@ -68,9 +68,9 @@ You can check the state of the rebalance by inspecting the ``KafkaRebalance`` re
 
 Finally, once the rebalancing state is ready, set ``brokerStorage.enabled: true`` and ``brokerStorage.migration.enabled: false`` and ``brokerStorage.migration.rebalance: false``.
 
-Note that the PVCs of the old brokers need to be deleted manually, as they are orphan resources in Sasquatch. 
+Note that the PVCs of the old brokers need to be deleted manually, as they are orphan resources in Sasquatch.
 
-Also, keep in mind that Strimzi will assign new broker IDs to the newly created brokers. 
+Also, keep in mind that Strimzi will assign new broker IDs to the newly created brokers.
 Ensure that you update the broker IDs wherever they are used, such as in the Kafka external listener configuration.
 
 
