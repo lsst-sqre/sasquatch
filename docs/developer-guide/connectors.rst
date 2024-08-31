@@ -106,14 +106,13 @@ To list the connectors deployed in a Sasquatch environment, run:
 
 .. code:: bash
 
-  kubectl get deploy -l app=sasquatch-telegraf-kafka-consumer -n sasquatch
+  kubectl get deploy -l app.kubernetes.io/name=sasquatch-telegraf -n sasquatch
 
-To view the logs of a connector or multiple connectors run:
+To view the logs of a connector or multiple connector instances run:
 
 .. code:: bash
 
-  kubectl logs sasquatch-telegraf-<connector-name> -n sasquatch
-  kubectl logs -l app=sasquatch-telegraf-kafka-consumer --tail=5  -n sasquatch
+  kubectl logs -l app.kubernetes.io/instance=sasquatch-telegraf-<connector-name> --tail=5  -n sasquatch
 
 To stop a connector, run:
 
