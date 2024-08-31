@@ -38,7 +38,7 @@ Note that you do not explicitly set the Kafka ``metadataVersion`` in Sasquatch; 
     This happens because, while the first broker will be running the new version supported by the operator, the third broker will still be on an unsupported version.
     Since Sasquatch requires a minimum of two in-sync replicas for each Kafka topic, this mismatch would cause an outage.
 
-    If your current version of Kafka is not supported by the new version of the operator, to avoid an outage during the upgrades, first update Kafka to a supported version and then update the operator. 
+    If your current version of Kafka is not supported by the new version of the operator, to avoid an outage during the upgrades, first update Kafka to a supported version and then update the operator.
 
 Refer to the `Strimzi documentation`_ for more details.
 
