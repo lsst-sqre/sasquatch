@@ -16,3 +16,9 @@ extensions = [
 
 [sphinx.intersphinx.projects]
 python = "https://docs.python.org/3/"
+
+[sphinx.linkcheck]
+ignore = [
+    # This is not written yet
+    '^https://safir.lsso.io/user-guide/kafka.html',
+]
