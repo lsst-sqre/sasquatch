@@ -37,4 +37,5 @@ User guide
     Namespaces <namespaces>
     Avro schemas <avro>
     Kafka REST Proxy <restproxy>
+    Connect directly to Kafka <directconnection>
     Kafdrop <kafdrop>
