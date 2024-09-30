@@ -7,6 +7,8 @@ Setting certain Sasquatch values in Phalanx will create Kafka user and topic, an
 
 The messages are expected to be in :ref:`Avro <avro>` format, and schemas are expected to be in the `Schema Registry`_ for any messages that are encoded with a schema ID.
 
+.. _InfluxDB: https://docs.influxdata.com/enterprise_influxdb/v1/
+.. _Kafka: https://kafka.apache.org
 .. _Schema Registry: https://docs.confluent.io/platform/current/schema-registry/
 .. _Safir: https://safir.lsst.io
 
@@ -18,7 +20,7 @@ Apps that want to publish metrics events need to:
 
 * Set ``app-metrics.enabled`` to ``true`` in every Sasquatch **environment** values files where app metrics should be enabled
 * Add the app name to the  ``app-metrics.apps`` list in the Sasquatch **environment** values file
-* Add an entry to`globalAppConfig` dict in the **app-metrics** ``values.yaml`` file in Phalanx.
+* Add an entry to the ``globalAppConfig`` dict in the **app-metrics** ``values.yaml`` file in Phalanx.
 
 This entry should be structured like this:
 
@@ -45,8 +47,6 @@ This will:
 Then in your app, you can :ref:`connect to kafka<directconnection>` and publish events manually, or if you have a `Safir`_ app, you can use the Safir metrics helpers to streamline this integration.
 
 .. _Telegraf: https://www.influxdata.com/time-series-platform/telegraf/
-.. _InfluxDB: https://docs.influxdata.com/enterprise_influxdb/v1/
-.. _Kafka: https://strimzi.io/
 .. _tags: https://docs.influxdata.com/influxdb/v1/concepts/glossary/#tag
 .. _fields: https://docs.influxdata.com/influxdb/v1/concepts/glossary/#field
 
@@ -65,7 +65,8 @@ It can be difficult to decide what should be a tag and what should be a field, b
 * If it's a value that will be aggregated and graphed over time, like the duration of a query, then it should be a field, because you'll never be filtering on it.
 * If it's metadata like which app generated the event, then it should be a tag.
 
-One thing to keep in mind is that tags shouldn't be "high-cardinality", meaning you shouldn't specify something with a lot of different values as a tag, becuase it could greatly increase the memory usage of the InfluxDB instance, and having a lot of high-cardinality tags could decrease query performance across the board.
+One thing to keep in mind is that tags shouldn't be _high-cardinality,_ meaning you shouldn't specify something with a lot of different values as a tag, because it could greatly increase the memory usage of the InfluxDB instance.
+Having a lot of high-cardinality tags could decrease query performance across the board.
 
 How many values for a key makes it high-cardinality?
 There's not a lot of concrete advice on that, and it depends a lot on the composition of the entire dataset, and the cardinality of other tags, so let's say **10,000** for now. This means if you have a username on an event, it can be a tag.
