@@ -65,8 +65,11 @@ It can be difficult to decide what should be a tag and what should be a field, b
 * If it's a value that will be aggregated and graphed over time, like the duration of a query, then it should be a field, because you'll never be filtering on it.
 * If it's metadata like which app generated the event, then it should be a tag.
 
-One thing to keep in mind is that tags shouldn't be _high-cardinality,_ meaning you shouldn't specify something with a lot of different values as a tag, because it could greatly increase the memory usage of the InfluxDB instance.
-Having a lot of high-cardinality tags could decrease query performance across the board.
+One thing to keep in mind is that tags shouldn't have a large number of distinct values.
+That could lead to a `high-cardinality`_ dataset in InfluxDB, especially when combined with other tags with many distinct values.
+A high-cardinality dataset could greatly increase the memory usage of the InfluxDB instance and decrease query performance across the board.
 
-How many values for a key makes it high-cardinality?
-There's not a lot of concrete advice on that, and it depends a lot on the composition of the entire dataset, and the cardinality of other tags, so let's say **10,000** for now. This means if you have a username on an event, it can be a tag.
+How many values is too many?
+There's not a lot of concrete advice on that, and it depends a lot on other tags and the composition of the entire dataset, so let's say **10,000** for now. This means if you have a username on an event, it can be a tag.
+
+.. _high-cardinality: https://www.influxdata.com/blog/red-flags-of-high-cardinality-in-databases/
