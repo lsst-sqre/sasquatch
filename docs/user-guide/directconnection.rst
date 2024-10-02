@@ -1,3 +1,5 @@
+.. _directconnection:
+
 ############################
 Connecting directly to Kafka
 ############################

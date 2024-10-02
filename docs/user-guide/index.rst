@@ -39,3 +39,4 @@ User guide
     Kafka REST Proxy <restproxy>
     Connect directly to Kafka <directconnection>
     Kafdrop <kafdrop>
+    Application metrics <app-metrics>
