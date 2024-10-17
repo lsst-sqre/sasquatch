@@ -86,41 +86,47 @@ For example, you might query the ``lsst.example.skyFluxMetric`` metric and group
 
 See `InfluxDB schema design and data layout`_ for more insights on how to design tags.
 
-Deployment and scaling
-======================
-
-In Argo CD, sync the connector ConfigMap and the Deployment Kubernetes resources to deploy a connector.
-
-To scale a connector horizontally, increase the ``kafkaConsumers.<connector name>.replicaCount`` value in the ``sasquatch/values-<environment>.yaml`` file.
-
-.. note::
-
-  Note that scaling the connector horizontally only works if the Kafka topic has multiple partitions.
-  The number of topic partitions must be a multiple of the number of connector replicas.
-  For example if your topic was created with 8 partitions, you can scale the connector to 1, 2, 4, or 8 replicas.
-
 Operations
 ==========
 
-To list the connectors deployed in a Sasquatch environment, run:
+Deployment
+----------
+
+To deploy a connector sync the connector ConfigMap and Deployment Kubernetes resources in Argo CD.
+
+List, stop and start connectors
+-------------------------------
+
+To list the connectors in a given Sasquatch environment, run:
 
 .. code:: bash
 
   kubectl get deploy -l app.kubernetes.io/name=sasquatch-telegraf -n sasquatch
 
-To view the logs of a connector or multiple connector instances run:
+To view the view the logs of a single connector instance, run:
 
 .. code:: bash
 
-  kubectl logs -l app.kubernetes.io/instance=sasquatch-telegraf-<connector-name> --tail=5  -n sasquatch
+  kubectl logs -l app.kubernetes.io/instance=sasquatch-telegraf-<connector-name> -n sasquatch
 
-To stop a connector, run:
+To stop the connectors you can scale the deployment replicas down to zero:
 
 .. code:: bash
 
-  kubectl scale deploy/sasquatch-telegraf-<connector-name> --replicas=0 -n sasquatch
+  kubectl scale deploy -l app.kubernetes.io/name=sasquatch-telegraf --replicas=0 -n sasquatch
 
-or set the ``kafkaConsumers.<connector name>.enabled`` key to ``false`` in the ``sasquatch/values-<environment>.yaml`` file and sync the connector ConfigMap and the Deployment Kubernetes resources in Argo CD.
+To start the connectors you can scale the deployment replicas back to one:
+
+.. code:: bash
+
+  kubectl scale deploy -l app.kubernetes.io/name=sasquatch-telegraf --replicas=1 -n sasquatch
+
+To permanently remove a connector set the ``kafkaConsumers.<connector name>.enabled`` key to ``false`` in the ``sasquatch/values-<environment>.yaml`` file and sync the connector ConfigMap and the Deployment Kubernetes resources in Argo CD.
+
+Monitoring
+----------
+
+Telegraf internal metrics are recorded under the ``telegraf`` database in Sasquatch and provide information about memory and buffer usage, throughput as well as read and write errors for each connector instance.
 
 
 .. _InfluxDB v1 output: https://github.com/influxdata/telegraf/blob/master/plugins/outputs/influxdb/README.md
