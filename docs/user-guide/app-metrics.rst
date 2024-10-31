@@ -1,9 +1,11 @@
+.. _appmetrics:
+
 ===================
 Application metrics
 ===================
 
 Applications can use Sasquatch infrastructure to publish metrics events to `InfluxDB`_ via `Kafka`_.
-Setting certain Sasquatch values in Phalanx will create Kafka user and topic, and configure a Telegraf consumer to put messages from that topic into the ``telegraf-kafka-app-metrics-consumer`` database in the Sasquatch InfluxDB instance.
+Setting certain Sasquatch values in Phalanx will create Kafka user and topic, and configure a Telegraf consumer to put messages from that topic into the ``lsst.square.metrics`` database in the Sasquatch InfluxDB instance.
 
 The messages are expected to be in :ref:`Avro <avro>` format, and schemas are expected to be in the `Schema Registry`_ for any messages that are encoded with a schema ID.
 

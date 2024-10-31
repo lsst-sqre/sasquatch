@@ -15,11 +15,17 @@ This guide describes the the most secure and straightforward option, assuming th
 Generating Kafka credentials
 ============================
 
+.. note::
+
+   The ``strimzi-access-operator`` `Phalanx`_ app must be enabled.
+   It provides the ``KafkaAccess`` CRD that is used in this guide.
+
 You can generate Kafka credentials by creating a couple of `Strimzi`_ resources:
 
 * A `KafkaUser`_ resource, in the ``sasquatch`` namespace, to configure a user in the Kafka cluster and provision a Kubernetes Secret with that user's credentials
 * A `KafkaAccess`_ resource, in your app's namespace, to make those credentials and other Kafka connection information available to your app
 
+.. _Phalanx: https://phalanx.lsst.io
 .. _Strimzi: https://strimzi.io
 .. _KafkaUser: https://strimzi.io/docs/operators/latest/configuring.html#type-KafkaUser-reference
 .. _KafkaAccess: https://github.com/strimzi/kafka-access-operator

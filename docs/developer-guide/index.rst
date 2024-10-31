@@ -18,6 +18,7 @@ A Sasquatch developer is responsible for maintaining the Sasquatch components an
    kafka-shutdown
    broker-migration
    connectors
+   new-environment
 
 .. toctree::
    :caption: Troubleshooting
