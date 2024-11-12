@@ -115,11 +115,11 @@ To stop the connectors you can scale the deployment replicas down to zero:
 
   kubectl scale deploy -l app.kubernetes.io/name=sasquatch-telegraf --replicas=0 -n sasquatch
 
-To start the connectors you can scale the deployment replicas back to one:
+To restart the connectors:
 
 .. code:: bash
 
-  kubectl scale deploy -l app.kubernetes.io/name=sasquatch-telegraf --replicas=1 -n sasquatch
+  kubectl rollout restart deploy -l app.kubernetes.io/name=sasquatch-telegraf -n sasquatch
 
 To permanently remove a connector set the ``kafkaConsumers.<connector name>.enabled`` key to ``false`` in the ``sasquatch/values-<environment>.yaml`` file and sync the connector ConfigMap and the Deployment Kubernetes resources in Argo CD.
 
