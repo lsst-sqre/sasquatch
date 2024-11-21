@@ -83,8 +83,7 @@ Backup and restore
 The ``influxd-ctl`` tool provides commands to backup and restore shards. 
 
 A meta node doesn't have enough space to keep the backup files. 
-To perform backup and restore operations, download the ``influxd-ctl`` tool and bind it to a meta node:
-
+To perform backup and restore operations, download the ``influxd-ctl`` tool and bind it to a meta node.
 Download the ``influxd-ctl`` tool from the InfluxData website:
 
 .. code-block:: bash
@@ -114,11 +113,13 @@ Where ``<shard ID>`` identifies the shard to be restored from the backup and ``<
 
     If you are restoring a shard from a different database (e.g. restoring data the Summit EFD database to the USDF EFD database) **shard IDs do not align**, and so ``<new shard ID>`` should reflect the shard ID in the destination database which has **the same same start time** as in the source database.
 
-.. note::
 
-    Hot shards can truncated using the ``influxd-ctl truncate-shards`` command before backup and restore operations.
 
-For cold shards it is also possible to manually copy the shard TSM files to one of the destination data nodes under the appropriate directory, and then use the ``influxd-ctl copy-shards`` command to copy the shard to the other data node. 
+Hot shards can be truncated using the ``influxd-ctl truncate-shards`` command before backup and restore operations. 
+After truncating a shard, another shard is created and new writes are directed to the new shard. 
+Truncated shards are marked as cold.
+
+For cold shards, it is possible to manually copy the shard TSM files to one of the destination data nodes under the appropriate directory, and then use the ``influxd-ctl copy-shards`` command to copy the shard to the other data node. 
 
 This procedure was applied to restore shard 786 at the USDF EFD database, after InfluxData ran an offline compaction of that shard to fix a slow query issue. 
 In this case the shard restore is as follows:
@@ -142,13 +143,13 @@ In this case the shard restore is as follows:
     # Copy shard 786 from data-0 to data-1
     kubectl exec -it sasquatch-influxdb-enterprise-meta-0 -n sasquatch -- influxd-ctl copy-shard sasquatch-influxdb-enterprise-data-0.sasquatch-influxdb-enterprise-data.sasquatch.svc.cluster.local:8088 sasquatch-influxdb-enterprise-data-1.sasquatch-influxdb-enterprise-data.sasquatch.svc.cluster.local:8088 786
 
-    # Finally restart the InfluxDB data statefulset to reload the shards data and rebuild the TSM in-memory indexes.
+
+Finally, restart the InfluxDB data statefulset to reload the shards data and rebuild the TSM in-memory indexes.
  
 .. note::
 
-    Note the difference between removing the shard files manually and using the ``influxd-ctl remove-shard`` command. 
-    The ``remove-shard`` command removes the shard from the meta node and the data node, while manually removing the shard TSM and index files only removes the shard from the data node (the data node is still listed as owner of that shard).
-
+    The difference between removing the shard files manually and using the ``influxd-ctl remove-shard`` command is that, the ``remove-shard`` command removes the shard from the meta node and the data node, while manually removing the shard TSM and index files only removes the shard data (the data node is still listed as owner of that shard).
+    
 
 .. _influxd-ctl: https://docs.influxdata.com/enterprise_influxdb/v1/tools/influxd-ctl/
 .. _influx_inspect: https://docs.influxdata.com/enterprise_influxdb/v1/tools/influx_inspect/
