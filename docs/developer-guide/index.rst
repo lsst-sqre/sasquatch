@@ -14,11 +14,12 @@ A Sasquatch developer is responsible for maintaining the Sasquatch components an
 .. toctree::
    :caption: Guides
 
+   new-environment
    strimzi-updates
    kafka-shutdown
    broker-migration
    connectors
-   new-environment
+   managing-shards
 
 .. toctree::
    :caption: Troubleshooting
