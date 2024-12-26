@@ -17,5 +17,7 @@ Sasquatch is currently deployed at the Summit, USDF and test stands through `Pha
    User guide <user-guide/index>
    Environments <environments>
    Developer guide <developer-guide/index>
+   FAQ <faq>
+   Resources <resources>
 
 .. _Phalanx: https://phalanx.lsst.io
