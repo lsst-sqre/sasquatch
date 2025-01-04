@@ -5,7 +5,7 @@ FROM influxdb:1.11.8-meta
 # Install pipx and use it to install gsutil which is required for the backup script
 # to upload the backup files to Google Cloud Storage
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip pipx && \
+    apt-get install -y python3 python3-pip pipx jq && \
     pipx install gsutil && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
@@ -15,6 +15,11 @@ ENV PATH="/root/.local/bin:$PATH"
 
 # Verify gsutil installation
 RUN gsutil --version
+
+# Install kubectl
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
+    chmod +x kubectl && \
+    mv kubectl /usr/local/bin/
 
 # Add the backup script
 COPY backup/backup.sh /usr/local/bin/backup.sh
