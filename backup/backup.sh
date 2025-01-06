@@ -10,6 +10,8 @@ backup_chronograf() {
   kubectl cp -n sasquatch "$pod:/var/lib/chronograf/chronograf-v1.db" "$backup_dir/chronograf-v1.db" > /dev/null 2>&1
   if [ $? -eq 0 ] && [ -f "$backup_dir/chronograf-v1.db" ]; then
     echo "Backup completed successfully at $backup_dir."
+    echo "Cleaning up backups older than $retention_days day(s)..."
+    find /backup -type d -name "chronograf-*" -mtime +$retention_days -exec rm -rf {} \;
   else
     echo "Backup failed!" >&2
     exit 1
@@ -24,13 +26,15 @@ backup_kapacitor() {
   kubectl cp -n sasquatch "$pod:/var/lib/kapacitor/kapacitor.db" "$backup_dir/kapacitor.db" > /dev/null 2>&1
   if [ $? -eq 0 ] && [ -f "$backup_dir/kapacitor.db" ]; then
     echo "Backup completed successfully at $backup_dir."
+    echo "Cleaning up backups older than $retention_days day(s)..."
+    find /backup -type d -name "kapacitor-*" -mtime +$retention_days -exec rm -rf {} \;
   else
     echo "Backup failed!" >&2
     exit 1
   fi
 }
 
-backup_influxdb_enterprise() {
+backup_influxdb_enterprise_incremental() {
   echo "Backing up InfluxDB Enterprise (incremental backup)..."
   backup_dir="/backup/sasquatch-influxdb-enterprise-backup"
   backup_logs="/backup/sasquatch-influxdb-enterprise-backup/backup-$(date +%Y-%m-%d).logs"
@@ -54,6 +58,7 @@ BACKUP_ITEMS=$(echo "$BACKUP_ITEMS" | jq -c '.[]')
 for item in $BACKUP_ITEMS; do
   name=$(echo "$item" | jq -r '.name')
   enabled=$(echo "$item" | jq -r '.enabled')
+  retention_days=$(echo "$item" | jq -r '.retention_days')
 
   if [ "$enabled" == "true" ]; then
     case "$name" in
@@ -63,8 +68,8 @@ for item in $BACKUP_ITEMS; do
       "kapacitor")
         backup_kapacitor
         ;;
-      "influxdb-enterprise")
-        backup_influxdb_enterprise
+      "influxdb-enterprise-incremental")
+        backup_influxdb_enterprise_incremental
         ;;
       *)
         echo "Unknown backup item: $name. Skipping..."
@@ -74,3 +79,5 @@ for item in $BACKUP_ITEMS; do
     echo "Skipping $name..."
   fi
 done
+echo "Backup contents:"
+ls -lhtR /backup
