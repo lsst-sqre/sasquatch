@@ -14,6 +14,6 @@ The Schema Registry Operator cannot recreate its JKS secret when Strimzi rotates
 **Solution:**
 Use this procedure in Argo CD to force Schema Registry Operator to create the JKS secret:
 
-- Delete the ``strimzischemaregistry`` resource called ``sasquatch-schema-registry``
-- Restart the deployment resource called ``strimzi-registry-operator``
-- Re-sync the ``strimzischemaregistry`` resource called ``sasquatch-schema-registry``
+- Delete the ``StrimziSchemaRegistry`` resource called ``sasquatch-schema-registry``
+- Restart the ``Deployment`` resource called ``strimzi-registry-operator``
+- Re-sync the ``StrimziSchemaRegistry`` resource called ``sasquatch-schema-registry``
