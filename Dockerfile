@@ -21,6 +21,16 @@ RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/s
     chmod +x kubectl && \
     mv kubectl /usr/local/bin/
 
+# Install influxd from InfluxDB OSS 1.11.8
+RUN mkdir influxdb-1.11.8 && \
+    curl -LO "https://download.influxdata.com/influxdb/releases/influxdb-1.11.8-linux-amd64.tar.gz" && \
+    tar xf influxdb-1.11.8-linux-amd64.tar.gz -C influxdb-1.11.8 && \
+    mv influxdb-1.11.8/influxd /usr/local/bin/ && \
+    rm -rf influxdb-1.11.8-linux-amd64.tar.gz
+
+# Verify influxd installation
+RUN influxd version
+
 # Add the backup script
 COPY backup/backup.sh /usr/local/bin/backup.sh
 RUN chmod +x /usr/local/bin/backup.sh
