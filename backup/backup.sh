@@ -48,6 +48,22 @@ backup_influxdb_enterprise_incremental() {
   fi
 }
 
+backup_influxdb_oss() {
+  echo "Backing up InfluxDB OSS (full backup)..."
+  backup_dir="/backup/sasquatch-influxdb-oss-$(date +%Y-%m-%d)"
+  backup_logs="/backup/sasquatch-influxdb-oss-$(date +%Y-%m-%d)/backup.logs"
+  mkdir -p "$backup_dir"
+  influxd backup -portable -host sasquatch-influxdb.sasquatch:8088 "$backup_dir" > $backup_logs 2>&1
+  if [ $? -eq 0 ]; then
+    echo "Backup completed successfully at $backup_dir."
+    echo "Cleaning up backups older than $retention_days day(s)..."
+    find /backup -type d -name "sasquatch-influxdb-oss-*" -mtime +$retention_days -exec rm -rf {} \;
+  else
+    echo "Backup failed!" >&2
+    exit 1
+  fi
+}       
+
 if [ -z "$BACKUP_ITEMS" ]; then
   echo "No backup items specified. Exiting."
   exit 0
@@ -70,6 +86,9 @@ for item in $BACKUP_ITEMS; do
         ;;
       "influxdb-enterprise-incremental")
         backup_influxdb_enterprise_incremental
+        ;;
+      "influxdb-oss")
+        backup_influxdb_oss
         ;;
       *)
         echo "Unknown backup item: $name. Skipping..."
