@@ -2,79 +2,73 @@
 
 set -e
 
+# Function to generate a timestamp in ISO 8601 format without separators
+get_timestamp() {
+  date -u +"%Y%m%dT%H%M%SZ"
+}
+
 backup_chronograf() {
   echo "Backing up Chronograf..."
   pod=$(kubectl get pods -n sasquatch -l app=sasquatch-chronograf -o jsonpath='{.items[0].metadata.name}')
-  backup_dir="/backup/chronograf-$(date +%Y-%m-%d)"
+  backup_dir="/backup/chronograf-$(get_timestamp)"
   mkdir -p "$backup_dir"
+
   kubectl cp -n sasquatch "$pod:/var/lib/chronograf/chronograf-v1.db" "$backup_dir/chronograf-v1.db" > /dev/null 2>&1
-  if [ $? -eq 0 ] && [ -f "$backup_dir/chronograf-v1.db" ]; then
-    echo "Backup completed successfully at $backup_dir."
-    echo "Cleaning up backups older than $retention_days day(s)..."
-    find /backup -type d -name "chronograf-*" -mtime +$retention_days -exec rm -rf {} \;
-  else
-    echo "Backup failed!" >&2
-    exit 1
-  fi
+  echo "Backup completed successfully at $backup_dir."
+
+  echo "Cleaning up backups older than $retention_days day(s)..."
+  find /backup -type d -name "chronograf-*" -mtime +$retention_days -exec rm -rf {} \;
 }
 
 backup_kapacitor() {
   echo "Backing up Kapacitor..."
   pod=$(kubectl get pods -n sasquatch -l app=sasquatch-kapacitor -o jsonpath='{.items[0].metadata.name}')
-  backup_dir="/backup/kapacitor-$(date +%Y-%m-%d)"
+  backup_dir="/backup/kapacitor-$(get_timestamp)"
   mkdir -p "$backup_dir"
+
   kubectl cp -n sasquatch "$pod:/var/lib/kapacitor/kapacitor.db" "$backup_dir/kapacitor.db" > /dev/null 2>&1
-  if [ $? -eq 0 ] && [ -f "$backup_dir/kapacitor.db" ]; then
-    echo "Backup completed successfully at $backup_dir."
-    echo "Cleaning up backups older than $retention_days day(s)..."
-    find /backup -type d -name "kapacitor-*" -mtime +$retention_days -exec rm -rf {} \;
-  else
-    echo "Backup failed!" >&2
-    exit 1
-  fi
+  echo "Backup completed successfully at $backup_dir."
+
+  echo "Cleaning up backups older than $retention_days day(s)..."
+  find /backup -type d -name "kapacitor-*" -mtime +$retention_days -exec rm -rf {} \;
 }
 
 backup_influxdb_enterprise_incremental() {
   echo "Backing up InfluxDB Enterprise (incremental backup)..."
   backup_dir="/backup/sasquatch-influxdb-enterprise-backup"
-  backup_logs="/backup/sasquatch-influxdb-enterprise-backup/backup-$(date +%Y-%m-%d).logs"
+  backup_logs="$backup_dir/backup-$(get_timestamp).logs"
   mkdir -p "$backup_dir"
-  influxd-ctl -bind sasquatch-influxdb-enterprise-meta.sasquatch:8091 backup -strategy incremental "$backup_dir" > $backup_logs 2>&1
-  if [ $? -eq 0 ]; then
-    echo "Backup completed successfully at $backup_dir."
-  else
-    echo "Backup failed!" >&2
-    exit 1
-  fi
+
+  influxd-ctl -bind sasquatch-influxdb-enterprise-meta.sasquatch:8091 backup -strategy incremental "$backup_dir" > "$backup_logs" 2>&1
+  echo "Backup completed successfully at $backup_dir. Logs stored at $backup_logs."
 }
 
-backup_influxdb_oss() {
+backup_influxdb_oss_full() {
   echo "Backing up InfluxDB OSS (full backup)..."
-  backup_dir="/backup/sasquatch-influxdb-oss-$(date +%Y-%m-%d)"
-  backup_logs="/backup/sasquatch-influxdb-oss-$(date +%Y-%m-%d)/backup.logs"
+  backup_dir="/backup/sasquatch-influxdb-oss-full-$(get_timestamp)"
+  backup_logs="$backup_dir/backup.logs"
   mkdir -p "$backup_dir"
-  influxd backup -portable -host sasquatch-influxdb.sasquatch:8088 "$backup_dir" > $backup_logs 2>&1
-  if [ $? -eq 0 ]; then
-    echo "Backup completed successfully at $backup_dir."
-    echo "Cleaning up backups older than $retention_days day(s)..."
-    find /backup -type d -name "sasquatch-influxdb-oss-*" -mtime +$retention_days -exec rm -rf {} \;
-  else
-    echo "Backup failed!" >&2
-    exit 1
-  fi
-}       
 
+  influxd backup -portable -host sasquatch-influxdb.sasquatch:8088 "$backup_dir" > "$backup_logs" 2>&1
+  echo "Backup completed successfully at $backup_dir. Logs stored at $backup_logs."
+
+  echo "Cleaning up backups older than $retention_days day(s)..."
+  find /backup -type d -name "sasquatch-influxdb-oss-*" -mtime +$retention_days -exec rm -rf {} \;
+}
+
+# Check if BACKUP_ITEMS is set
 if [ -z "$BACKUP_ITEMS" ]; then
   echo "No backup items specified. Exiting."
   exit 0
 fi
 
+# Process backup items
 BACKUP_ITEMS=$(echo "$BACKUP_ITEMS" | jq -c '.[]')
 
 for item in $BACKUP_ITEMS; do
   name=$(echo "$item" | jq -r '.name')
   enabled=$(echo "$item" | jq -r '.enabled')
-  retention_days=$(echo "$item" | jq -r '.retention_days')
+  retention_days=$(echo "$item" | jq -r '.retentionDays')
 
   if [ "$enabled" == "true" ]; then
     case "$name" in
@@ -87,8 +81,8 @@ for item in $BACKUP_ITEMS; do
       "influxdb-enterprise-incremental")
         backup_influxdb_enterprise_incremental
         ;;
-      "influxdb-oss")
-        backup_influxdb_oss
+      "influxdb-oss-full")
+        backup_influxdb_oss_full
         ;;
       *)
         echo "Unknown backup item: $name. Skipping..."
@@ -98,5 +92,6 @@ for item in $BACKUP_ITEMS; do
     echo "Skipping $name..."
   fi
 done
+
 echo "Backup contents:"
-ls -lhtR /backup
+du -sh /backup/*

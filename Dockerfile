@@ -35,6 +35,10 @@ RUN influxd version
 COPY backup/backup.sh /usr/local/bin/backup.sh
 RUN chmod +x /usr/local/bin/backup.sh
 
+# Add the restore script
+COPY backup/restore.sh /usr/local/bin/restore.sh
+RUN chmod +x /usr/local/bin/restore.sh
+
 # Create a new user to run the backup script
 RUN useradd --create-home sasquatch
 
