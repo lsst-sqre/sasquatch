@@ -1,6 +1,8 @@
 # Change log
 
-<!-- Format for headings: 1.2.3 (YYYY-MM-DD) -->
+## 1.3.0 (2025-01-14)
+
+- Add ability to restore InfluxDB OSS backups
 
 ## 1.2.0 (2025-01-08)
 
