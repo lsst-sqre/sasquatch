@@ -16,7 +16,7 @@ A Sasquatch developer is responsible for maintaining the Sasquatch components an
 
    new-environment
    strimzi-updates
-   kafka-shutdown
+   shutdown
    broker-migration
    connectors
    managing-shards
