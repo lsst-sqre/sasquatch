@@ -20,6 +20,7 @@ A Sasquatch developer is responsible for maintaining the Sasquatch components an
    broker-migration
    connectors
    managing-shards
+   adding-subcharts
 
 .. toctree::
    :caption: Troubleshooting
