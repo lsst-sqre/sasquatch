@@ -164,13 +164,7 @@ If the Sasquatch restore deployment is enable, you can exec into the restore Pod
 
    kubectl exec -it <sasquatch restore pod> -n sasquatch -- /bin/sh
 
-Then run the restore command:
-
-.. code-block:: bash
-
-   influxd-ctl -bind sasquatch-influxdb-enterprise-standby-meta:8091 \
-    restore -db <db name> /backup/sasquatch-influxdb-enterprise-backup/
-
+Then run the restore command.
 See the `InfluxDB Enterprise documentation`_ for more details on the restore command.
 
 Creating a Restore Job
