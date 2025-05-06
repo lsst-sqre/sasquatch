@@ -5,7 +5,7 @@
 Shutdown Kafka gracefully
 #########################
 
-It is recommended that you shut down Kafka gracefully before cluster interventions like OS or Kubernetes upgrades.
+This guide provides instructions to shut down Sasquatch Kafka gracefully before cluster interventions like OS or Kubernetes upgrades.
 To shut down Kafka gracefully, follow these steps:
 
 1. Pause reconciliation of Strimzi resources.
@@ -14,18 +14,16 @@ To shut down Kafka gracefully, follow these steps:
    .. code:: bash
 
       kubectl annotate --overwrite Kafka sasquatch strimzi.io/pause-reconciliation="true" -n sasquatch
-      kubectl annotate --overwrite KafkaConnect sasquatch strimzi.io/pause-reconciliation="true" -n sasquatch
 
-2. Shut down Kafka and KafkaConnect pods.
+2. Terminate the Kafka Controller and Broker Pods.
 
    .. code:: bash
 
-      kubectl delete StrimziPodSet sasquatch-connect sasquatch-controller sasquatch-kafka -n sasquatch
+      kubectl delete StrimziPodSet sasquatch-controller sasquatch-kafka-local-storage -n sasquatch
 
 3. After the intervention, resume reconciliation of Strimzi resources.
-   This will allow the operator to restart the pods.
+   This will trigger the operator to start the Pods again.
 
    .. code:: bash
 
       kubectl annotate --overwrite Kafka sasquatch strimzi.io/pause-reconciliation="false" -n sasquatch
-      kubectl annotate --overwrite KafkaConnect sasquatch strimzi.io/pause-reconciliation="false" -n sasquatch
