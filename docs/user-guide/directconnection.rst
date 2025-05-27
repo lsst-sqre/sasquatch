@@ -33,7 +33,7 @@ You can generate Kafka credentials by creating a couple of `Strimzi`_ resources:
 Strimzi KafkaUser resource
 --------------------------
 
-Here's an example of a ``KafkaUser`` with some of the common ACL rules you may want (more details about ACLs `here <https://docs.confluent.io/platform/current/security/authorization/acls/overview.html>`__):
+Here's an example of a ``KafkaUser``, placed in the ``sasquatch`` namespace, with some of the common ACL rules you may want (more details about ACLs `here <https://docs.confluent.io/platform/current/security/authorization/acls/overview.html>`__):
 
 .. code-block:: yaml
 
@@ -44,7 +44,7 @@ Here's an example of a ``KafkaUser`` with some of the common ACL rules you may w
      labels:
        # The name of the Strimzi ``Kafka`` resource, probably "sasquatch"
        strimzi.io/cluster: sasquatch
-
+   spec:
      authentication:
        # This should always be "tls"
        type: tls
