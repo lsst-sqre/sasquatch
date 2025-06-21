@@ -56,6 +56,33 @@ backup_influxdb_oss_full() {
   find /backup -type d -name "sasquatch-influxdb-oss-*" -mtime +$retention_days -exec rm -rf {} \;
 }
 
+backup_schemas() {
+  echo "Backing up schemas..."
+  backup_dir="/backup/schemas-$(get_timestamp)"
+  mkdir -p "$backup_dir"
+
+  SCHEMA_REGISTRY_URL="http://sasquatch-schema-registry.sasquatch:8081"
+
+  # List all subjects
+  subjects=$(curl -s "$SCHEMA_REGISTRY_URL/subjects")
+
+  # Iterate through each subject
+  for subject in $(echo $subjects | jq -r '.[]'); do
+    # Get all versions of the subject
+    versions=$(curl -s "$SCHEMA_REGISTRY_URL/subjects/$subject/versions")
+
+    for version in $(echo $versions | jq -r '.[]'); do
+      schema=$(curl -s "$SCHEMA_REGISTRY_URL/subjects/$subject/versions/$version")
+      echo $schema | jq '.' > "$backup_dir/${subject}_v${version}.json"
+    done
+  done
+
+  echo "Backup completed. Files saved to $backup_dir."
+
+  echo "Cleaning up backups older than $retention_days day(s)..."
+  find /backup -type d -name "schemas-*" -mtime +$retention_days -exec rm -rf {} \;
+}
+
 # Check if BACKUP_ITEMS is set
 if [ -z "$BACKUP_ITEMS" ]; then
   echo "No backup items specified. Exiting."
@@ -83,6 +110,9 @@ for item in $BACKUP_ITEMS; do
         ;;
       "influxdb-oss-full")
         backup_influxdb_oss_full
+        ;;
+      "schemas")
+        backup_schemas
         ;;
       *)
         echo "Unknown backup item: $name. Skipping..."
