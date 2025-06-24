@@ -135,6 +135,7 @@ If your app is a `Safir`_ app, you can use the `Safir Kafka helpers <https://saf
          containers:
          - env:
            - name: KAFKA_SECURITY_PROTOCOL
+             valueFrom:
                secretKeyRef:
                  key: securityProtocol
                  name: myapp-kafka
