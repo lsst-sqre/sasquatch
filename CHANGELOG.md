@@ -1,5 +1,10 @@
 # Change log
 
+## 1.3.1 (2025-06-24)
+
+- Improve error handling in the backup script
+- Remove restore script as this step is not automated (see [this section of the developer guide](https://sasquatch.lsst.io/developer-guide/backups.html) for detail).
+
 ## 1.3.0 (2025-01-14)
 
 - Add ability to restore InfluxDB OSS backups
