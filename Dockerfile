@@ -9,7 +9,7 @@ RUN apt-get update && \
     pipx install gsutil && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
-    
+
 # Add pipx bin directory to PATH
 ENV PATH="/root/.local/bin:$PATH"
 
@@ -34,10 +34,6 @@ RUN influxd version
 # Add the backup script
 COPY backup/backup.sh /usr/local/bin/backup.sh
 RUN chmod +x /usr/local/bin/backup.sh
-
-# Add the restore script
-COPY backup/restore.sh /usr/local/bin/restore.sh
-RUN chmod +x /usr/local/bin/restore.sh
 
 # Create a new user to run the backup script
 RUN useradd --create-home sasquatch
