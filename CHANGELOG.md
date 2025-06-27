@@ -1,5 +1,10 @@
 # Change log
 
+## 1.3.2 (20250-06-24)
+
+- Backup InfluxDB Enterprise active instance
+- Update path for InfluxDB Enterprise backup
+
 ## 1.3.1 (2025-06-24)
 
 - Improve error handling in the backup script
