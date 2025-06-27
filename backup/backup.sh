@@ -58,7 +58,7 @@ backup_kapacitor() {
 backup_influxdb_enterprise_incremental() {
   echo "Backing up InfluxDB Enterprise (incremental backup)..."
 
-  backup_dir="/backup/sasquatch-influxdb-enterprise-backup"
+  backup_dir="/backup/sasquatch-influxdb-enterprise-incremental"
   backup_logs="$backup_dir/backup-$(get_timestamp).logs"
   mkdir -p "$backup_dir"
 
