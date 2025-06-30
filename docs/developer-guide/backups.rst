@@ -78,14 +78,16 @@ Once deployed, you can check the CronJob and logs:
 
 Backups will be stored on the configured persistent volume and managed according to their retention policies.
 
-Suspending a Backup
-===================
+Suspending a Scheduled Backup
+=============================
 
-If you need to temporarily disable the execution of the backup CronJob without deleting it, you can suspend it using the following command:
+If you need to temporarily suspend scheduled backups use the following command:
 
 .. code-block:: bash
 
    kubectl patch cronjob sasquatch-backup -n sasquatch -p '{"spec" : {"suspend" : true }}'
+
+This is useful when running a restore command that takes longer that the next scheduled backup.
 
 To resume the job later:
 
@@ -93,22 +95,25 @@ To resume the job later:
 
    kubectl patch cronjob sasquatch-backup -n sasquatch -p '{"spec" : {"suspend" : false }}'
 
-This is useful when running a restore command that might take longer that the scheduled window to prevent a new backup job from writing to the backup volume.
-
 
 Restoring from a Backup
 =======================
 
 You can manually restore from the backup files stored in the persistent volume.
-To restore a backup, you can enable the restore deployment.
+To restore a backup, first you need to enable the restore deployment in `values-<environment>.yaml`:
 
 .. code-block:: yaml
 
-   restore:
-     enabled: true
+  backup:
+    restore:
+      enabled: true
 
-This creates a deployment that mount backup volume giving you access to the backup files in the ``/backup`` directory.
-You can then use the backup files to restore the services.
+This creates a deployment that mounts the backup volume giving you access to the backup files in the ``/backup`` directory.
+
+.. note::
+
+  Because the backup volume is ReadWriteOnce (RWO), before enabling the restore deployment make sure you temporarily supend the execution of the backup CronJob.
+
 
 Restoring from a Chronograf backup
 ==================================
