@@ -1,6 +1,6 @@
 # Change log
 
-## 1.3.2 (20250-06-24)
+## 1.3.2 (2025-06-27)
 
 - Backup InfluxDB Enterprise active instance
 - Update path for InfluxDB Enterprise backup
