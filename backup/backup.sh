@@ -103,7 +103,7 @@ BACKUP_ITEMS=$(echo "$BACKUP_ITEMS" | jq -c '.[]')
 for item in $BACKUP_ITEMS; do
   name=$(echo "$item" | jq -r '.name')
   enabled=$(echo "$item" | jq -r '.enabled')
-  retention_days=$(echo "$item" | jq -r '.retentionDays')
+  retention_days=$(echo "$item" | jq -r '.retentionDays // empty')
   bind=$(echo "$item" | jq -r '.bind // empty')
 
   if [ "$enabled" == "true" ]; then
