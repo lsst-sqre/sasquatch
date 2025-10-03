@@ -62,7 +62,7 @@ backup_influxdb_enterprise_incremental() {
   backup_logs="$backup_dir/backup-$(get_timestamp).logs"
   mkdir -p "$backup_dir"
 
-  if ! influxd-ctl -bind sasquatch-influxdb-enterprise-active-meta.sasquatch:8091 backup -strategy incremental "$backup_dir" > "$backup_logs" 2>&1; then
+  if ! influxd-ctl -bind $bind:8091 backup -strategy incremental "$backup_dir" > "$backup_logs" 2>&1; then
     echo "InfluxDB Enterprise backup failed. See logs at $backup_logs"
     return 1
   fi
@@ -104,6 +104,7 @@ for item in $BACKUP_ITEMS; do
   name=$(echo "$item" | jq -r '.name')
   enabled=$(echo "$item" | jq -r '.enabled')
   retention_days=$(echo "$item" | jq -r '.retentionDays')
+  bind=$(echo "$item" | jq -r '.bind // empty')
 
   if [ "$enabled" == "true" ]; then
     case "$name" in
