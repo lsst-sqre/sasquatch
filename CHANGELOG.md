@@ -1,5 +1,9 @@
 # Change log
 
+## 1.3.3 (2025-10-03)
+
+- Configure InfluxDB Enterprise biding address
+
 ## 1.3.2 (2025-06-27)
 
 - Backup InfluxDB Enterprise active instance
