@@ -70,6 +70,99 @@ backup_influxdb_enterprise_incremental() {
   echo "Backup completed successfully at $backup_dir. Logs stored at $backup_logs."
 }
 
+get_last_completed_shard_id() {
+  local bind="$1"
+  local db="$2"
+  if [ -z "$bind" ]; then
+    echo "Error: bind address is required to retrieve shard ID."
+    return 1
+  fi
+
+  local now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  # Look for the shard with EndTime ≤ now
+  local shard= $(influxd-ctl -bind meta:8091 show-shards | awk -v db=$db -v now=$now '
+  /^[[:space:]]*ID[[:space:]]/ {seen=1; next} seen && $2==$db && $7 <= now {print $1, $7}
+  ' | sort -k2,2 | tail -n1 )
+
+  if [ -z "$shard" ]; then
+    echo "Error: could not retrieve shard ID from InfluxDB Enterprise."
+    return 1
+  fi
+
+  local shard_id=$(echo "$shard" | awk '{print $1}')
+  local end_time=$(echo "$shard" | awk '{print $2}')
+
+  echo "Last completed shard ID: $shard_id with EndTime: $end_time"
+
+  echo "$shard_id"
+}
+
+backup_influxdb_enterprise_shard() {
+  # Required from BACKUP_ITEMS:
+  #   bind:         InfluxDB Enterprise meta service address without port
+  #   gcsBucket:    e.g. "gs://my-backup-bucket"
+  # Optional:
+  #   gcsPrefix:    e.g. "sasquatch/influxdb/shards"
+  #   db:           limit to a single database
+  #   retentionDays: remove backups older than the specified number of days
+
+  local shard_id="$(get_last_completed_shard_id $bind $db)"
+  echo "Backing up shard $shard_id from InfluxDB Enterprise..."
+
+  if [ -z "$bind" ]; then
+    echo "Missing 'bind' for InfluxDB Enterprise."
+    return 1
+  fi
+  if [ -z "$gcsBucket" ]; then
+    echo "Missing 'gcsBucket' (e.g., gs://my-bucket)."
+    return 1
+  fi
+
+  local ts="$(get_timestamp)"
+  local base_dir="/backup/influxdb-enterprise-shard-${shard_id}"
+  mkdir -p "$base_dir"
+  local backup_logs="$base_dir/backup-${ts}.log"
+
+  # Perform shard backups
+  local backup_dir="$base_dir/data"
+  mkdir -p "$backup_dir"
+
+  # TODO: confirm if manifest for single-shard backup is created automatically and has the shard start and end times
+
+  if ! influxd-ctl -bind "$bind:8091" backup -shard "$sid" "$backup_dir" >> "$backup_logs" 2>&1; then
+    echo "Backup failed for shard $sid. See $backup_logs"
+    return 1
+  fi
+
+  # Write checksum manifest for all files produced
+  echo "Generating SHA256 checksums..."
+  (cd "$backup_dir" && find . -type f -print0 | xargs -0 sha256sum) > "$base_dir/SHA256SUMS.txt" || {
+    echo "Failed to generate checksum manifest."
+    return 1
+  }
+
+  # Compose GCS destination: bucket/prefix/<timestamp>/
+  if [ -n "$gcsPrefix" ]; then
+    dest_uri="${gcsBucket%/}/$gcsPrefix/influxdb-enterprise-shard-${shard_id}/"
+  else
+    dest_uri="${gcsBucket%/}/influxdb-enterprise-shard-${shard_id}/"
+  fi
+
+  echo "Uploading to $dest_uri ..."
+  # gsutil cp validates integrity with checksums on upload
+  if ! gsutil -m cp -r "$backup_dir" "$base_dir/SHA256SUMS.txt" "$dest_uri" >> "$backup_logs" 2>&1; then
+    echo "Upload to GCS failed. See $backup_logs"
+    return 1
+  fi
+
+  # If we made it here, copies were checksum-validated.
+  echo "Upload complete. Removing local backup at $base_dir ..."
+  rm -rf "$base_dir" || echo "Warning: failed to remove $base_dir"
+
+  echo "Shard backup completed successfully."
+}
+
 backup_influxdb_oss_full() {
   echo "Backing up InfluxDB OSS (full backup)..."
 
