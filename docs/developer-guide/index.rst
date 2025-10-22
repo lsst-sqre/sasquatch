@@ -26,4 +26,3 @@ A Sasquatch developer is responsible for maintaining the Sasquatch components an
 .. toctree::
    :caption: Troubleshooting
 
-   schema-registry-ssl
