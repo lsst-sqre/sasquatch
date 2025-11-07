@@ -1,27 +1,31 @@
 .. _connectors:
 
-#################################
-Managing InfluxDB Sink connectors
-#################################
+############################
+Managing Telegraf connectors
+############################
 
-
-An InfluxDB Sink connector consumes data from Kafka and writes to InfluxDB.
-Sasquatch uses the Telegraf `Kafka consumer input`_ plugin and the `InfluxDB v1 output`_ plugin implemented in the `telegraf-kafka-consumer`_ subchart.
+Sasquatch uses Telegraf to consume data from Kafka and to write to InfluxDB.
+Telegraf is configured in the Sasquatch `telegraf`_ subchart and uses the `Kafka consumer`_ plugin with the Avro parser and the `InfluxDB v1`_ output plugin.
 
 Configuration
 =============
 
-The connector configuration is specified per Sasquatch environment in ``sasquatch/values-<environment>.yaml``.
+The Telegraf configuration is specified in each Sasquatch environment in ``sasquatch/values-<environment>.yaml``.
 
-Here's what the connector configuration for writing data from the ``lsst.example.skyFluxMetric`` kafka topic to InfluxDB looks like:
+In this section we cover the configuration options used in the ``example`` connector.
+For the complete set of configuration options see the `telegraf`_ subchart documentation.
+
+The ``example`` connector writes data for the ``skyFluxMetric`` metric (see :ref:`avro`) to InfluxDB.
+Here is the configuration for the ``example`` connector:
 
 .. code:: yaml
 
-  telegraf-kafka-consumer:
+  telegraf:
     enabled: true
     kafkaConsumers:
       example:
         enabled: true
+        debug: true
         topicRegexps: |
           [ "lsst.example" ]
         database: "lsst.example"
@@ -29,36 +33,35 @@ Here's what the connector configuration for writing data from the ``lsst.example
         timestamp_format: "unix_ms"
         tags: |
           [ "band", "instrument" ]
-        replicaCount: 1
 
-The following sections cover the most important configuration options using the ``lsst.example.skyFluxMetric`` metric as an example.
+Kafka topics and InfluxDB database
+----------------------------------
 
-See the `telegraf-kafka-consumer`_ subchart for the configuration options and default values.
+The ``skyFluxMetric`` metric is published to the ``lsst.example.skyFluxMetric`` Kafka topic, where the prefix ``lsst.example`` corresponds to the namespace.
 
-See the :ref:`avro` section to learn more about the ``lsst.example.skyFluxMetric`` example in Sasquatch.
-
-Selecting Kafka topics
-----------------------
-
-``kafkaConsumers.example.topicRegexps`` is a list of regular expressions used to specify the Kafka topics consumed by this connector, and ``KafkaConsumers.example.database`` is the name of the InfluxDB v1 database to write to.
-In this example, all Kafka topics prefixed by ``lsst.example`` are recorded in the ``lsst.example`` database in InfluxDB.
+``topicRegexps`` accepts a list of regular expressions to select the Kafka topics for this connector.
+The ``database`` specify the name of the database in InfluxDB v1 to record the data to.
+In this example, we select all Kafka topics from the ``lsst.example`` namespace and record the data in the ``lsst.example`` database in InfluxDB.
 
 .. note::
 
   If the database doesn't exist in InfluxDB it is automatically create by Telegraf.
-  Telegraf also records internal metrics from its input and output plugins in the same database.
 
-Timestamp
----------
+Timestamps
+----------
 
-InfluxDB, being a time-series database, requires a timestamp to index the data.
-The name of the field that contains the timestamp value and the timestamp format are specified by the ``kafkaConsumers.example.timestamp_field`` and
-``kafkaConsumers.timestamp_format`` keys.
+InfluxDB requires a timestamp to index the data.
+``timestamp_field`` specifies the name of the field that contains the timestamp we want to use, and ``timestamp_format`` specifies the timestamp format.
+In this example, the ``timestamp`` field contains timestamp values in Unix milliseconds format.
+
 
 Tags
 ----
 
-InfluxDB tags provide additional context when querying data.
+Tags provide additional context for querying the data. In InfluxDB, tags are indexed and can be used to filter and group data efficiently.
+To decide which fields to use as tags, consider the fields that you might want to filter or group by when querying the data.
+
+In the connector configuration use ``tags`` to specify the list of fields that should be tags in InfluxDB.
 
 From the ``lsst.example.skyFluxMetric`` metric example:
 
@@ -72,64 +75,92 @@ From the ``lsst.example.skyFluxMetric`` metric example:
         "stdevSky": 2328.906118708811,
     }
 
-``band`` and ``instrument`` are good candidates for tags, while ``meanSky`` and ``stdevSky`` are measurements associated to the ``lsst.example.skyFluxMetric`` metric.
-Tags are specified in the ``kafkaConsumers.example.tags`` list which is the superset of the tags from all the Kafka topics consumed by this connector.
-
-In InfluxDB tags are indexed, you can use tags to efficiently aggregate and filter data in different ways.
-For example, you might query the ``lsst.example.skyFluxMetric`` metric and group the results by ``band``, or you might filter the data to only return values for a specific band or instrument.
+``band`` and ``instrument`` are good candidates for tags, while ``meanSky`` and ``stdevSky`` are the metric values.
 
 .. note::
 
   In InfluxDB tags values are always strings.
-  Use an empty string when a tag value is missing.
-  Avoid tagging high cardinality fields such as IDs.
+  Use fields with discrete values as tags and avoid high cardinality fields.
 
 See `InfluxDB schema design and data layout`_ for more insights on how to design tags.
 
-Operations
-==========
+List connectors
+---------------
 
-Deployment
-----------
-
-To deploy a connector sync the connector ConfigMap and Deployment Kubernetes resources in Argo CD.
-
-List, stop and start connectors
--------------------------------
-
-To list the connectors in a given Sasquatch environment, run:
+To list the Telegraf connectors in a given Sasquatch environment run:
 
 .. code:: bash
 
-  kubectl get deploy -l app.kubernetes.io/name=sasquatch-telegraf -n sasquatch
+  kubectl -n sasquatch get deploy -l app.kubernetes.io/name=sasquatch-telegraf
 
-To view the view the logs of a single connector instance, run:
-
-.. code:: bash
-
-  kubectl logs -l app.kubernetes.io/instance=sasquatch-telegraf-<connector-name> -n sasquatch
-
-To stop the connectors you can scale the deployment replicas down to zero:
+To list the Telegraf connector Pods for all connector instances:
 
 .. code:: bash
 
-  kubectl scale deploy -l app.kubernetes.io/name=sasquatch-telegraf --replicas=0 -n sasquatch
+  kubectl -n sasquatch get pods -l app.kubernetes.io/name=sasquatch-telegraf
 
-To restart the connectors:
+To list the Telegraf connector Pod for a given connector instance (the connection name is the key used in the configuration, e.g. ``example``):
 
 .. code:: bash
 
-  kubectl rollout restart deploy -l app.kubernetes.io/name=sasquatch-telegraf -n sasquatch
+  kubectl -n sasquatch get pods -l app.kubernetes.io/instance=sasquatch-telegraf-<connector-name>
+  kubectl -n sasquatch get pods -l app.kubernetes.io/instance=sasquatch-telegraf-example
 
-To permanently remove a connector set the ``kafkaConsumers.<connector name>.enabled`` key to ``false`` in the ``sasquatch/values-<environment>.yaml`` file and sync the connector ConfigMap and the Deployment Kubernetes resources in Argo CD.
+View connector logs
+-------------------
+
+To view the last few log entries from all Telegraf connectors, run:
+
+.. code:: bash
+
+  kubectl -n sasquatch logs -l app.kubernetes.io/name=sasquatch-telegraf
+
+Use ``jq`` to format and filter the structured logs, for example to show only error messages:
+
+.. code:: bash
+
+  kubectl -n sasquatch logs -l app.kubernetes.io/name=sasquatch-telegraf | jq 'select(.level == "ERROR")'
+
+To view the logs from a single Telegraf connector instance, using ``-f`` to stream the logs during debugging:
+
+
+.. code:: bash
+
+  kubectl -n sasquatch logs -l app.kubernetes.io/instance=sasquatch-telegraf-<connector-name> -f
+  kubectl -n sasquatch logs -l app.kubernetes.io/instance=sasquatch-telegraf-example -f
+
+Stop connectors
+---------------
+
+To stop all Telegraf connectors you can scale the deployment down to zero replicas:
+
+.. code:: bash
+
+  kubectl -n sasquatch scale deploy -l app.kubernetes.io/name=sasquatch-telegraf --replicas=0
+
+To start the connectors again, scale the deployment back to one replica:
+
+.. code:: bash
+
+  kubectl -n sasquatch scale deploy -l app.kubernetes.io/name=sasquatch-telegraf --replicas=1
+
+Restart connectors
+------------------
+
+To restart all Telegraf connectors, run:
+
+.. code:: bash
+
+  kubectl -n sasquatch rollout restart deploy -l app.kubernetes.io/name=sasquatch-telegraf
 
 Monitoring
 ----------
 
 Telegraf internal metrics are recorded under the ``telegraf`` database in Sasquatch and provide information about memory and buffer usage, throughput as well as read and write errors for each connector instance.
+See the **Connectors** dashboard in Chronograf to monitor the Telegraf connectors.
 
 
-.. _InfluxDB v1 output: https://github.com/influxdata/telegraf/blob/master/plugins/outputs/influxdb/README.md
-.. _Kafka consumer input: https://github.com/influxdata/telegraf/blob/master/plugins/inputs/kafka_consumer/README.md
+.. _InfluxDB v1: https://github.com/influxdata/telegraf/blob/master/plugins/outputs/influxdb/README.md
+.. _Kafka consumer: https://github.com/influxdata/telegraf/blob/master/plugins/inputs/kafka_consumer/README.md
 .. _InfluxDB schema design and data layout: https://docs.influxdata.com/influxdb/v1/concepts/schema_and_data_layout
-.. _telegraf-kafka-consumer: https://github.com/lsst-sqre/phalanx/tree/main/applications/sasquatch/charts/telegraf-kafka-consumer/README.md
+.. _telegraf: https://github.com/lsst-sqre/phalanx/tree/main/applications/sasquatch/charts/telegraf/README.md
