@@ -1,22 +1,24 @@
 .. _connectors:
 
-############################
-Managing Telegraf connectors
-############################
+###################
+Telegraf connectors
+###################
 
-Sasquatch uses Telegraf to consume data from Kafka and to write to InfluxDB.
-Telegraf is configured in the Sasquatch `telegraf`_ subchart and uses the `Kafka consumer`_ plugin with the Avro parser and the `InfluxDB v1`_ output plugin.
+Sasquatch uses Telegraf to consume data from Kafka and write it to InfluxDB.
+This guide describes how to configure and deploy Telegraf connectors, manage their lifecycle (list, debug, stop, restart) and monitor their status.
 
 Configuration
 =============
 
-The Telegraf configuration is specified in each Sasquatch environment in ``sasquatch/values-<environment>.yaml``.
+Telegraf is deployed by the `telegraf`_ subchart and uses the `Kafka consumer`_ plugin with the Avro parser and the `InfluxDB v1`_ output plugin.
+
+The configuration is specified in each Sasquatch environment in ``sasquatch/values-<environment>.yaml``.
 
 In this section we cover the configuration options used in the ``example`` connector.
 For the complete set of configuration options see the `telegraf`_ subchart documentation.
 
 The ``example`` connector writes data for the ``skyFluxMetric`` metric (see :ref:`avro`) to InfluxDB.
-Here is the configuration for the ``example`` connector:
+Here is the ``example`` connector configuration:
 
 .. code:: yaml
 
@@ -34,14 +36,14 @@ Here is the configuration for the ``example`` connector:
         tags: |
           [ "band", "instrument" ]
 
-Kafka topics and InfluxDB database
-----------------------------------
+Specifying the Kafka topics and the InfluxDB database
+-----------------------------------------------------
 
-The ``skyFluxMetric`` metric is published to the ``lsst.example.skyFluxMetric`` Kafka topic, where the prefix ``lsst.example`` corresponds to the namespace.
+The ``skyFluxMetric`` metric is published to the ``lsst.example.skyFluxMetric`` Kafka topic.
 
-``topicRegexps`` accepts a list of regular expressions to select the Kafka topics for this connector.
-The ``database`` specify the name of the database in InfluxDB v1 to record the data to.
-In this example, we select all Kafka topics from the ``lsst.example`` namespace and record the data in the ``lsst.example`` database in InfluxDB.
+``topicRegexps`` accepts a list of regular expressions to select the Kafka topics for the connector, and ``database`` specifies the name of the database in InfluxDB.
+
+In this example, we select all Kafka topics from the ``lsst.example`` namespace and write the data into the ``lsst.example`` database in InfluxDB.
 
 .. note::
 
@@ -84,50 +86,93 @@ From the ``lsst.example.skyFluxMetric`` metric example:
 
 See `InfluxDB schema design and data layout`_ for more insights on how to design tags.
 
+Deployment
+==========
+
+Telegraf connectors are deployed as Kubernetes Deployments in the ``sasquatch`` namespace.
+Each connector instance has a separate ConfigMap and Deployment.
+
+To deploy a new connector instance, sync the Sasquatch application in Argo CD for the given environment.
+
+Managing connectors
+===================
+
 List connectors
 ---------------
 
-To list the Telegraf connectors in a given Sasquatch environment run:
+To list the Telegraf connectors in a given Sasquatch environment, run:
 
 .. code:: bash
 
-  kubectl -n sasquatch get deploy -l app.kubernetes.io/name=sasquatch-telegraf
+  kubectl get deploy \
+  --namespace sasquatch \
+  --selector app.kubernetes.io/name=sasquatch-telegraf
 
-To list the Telegraf connector Pods for all connector instances:
-
-.. code:: bash
-
-  kubectl -n sasquatch get pods -l app.kubernetes.io/name=sasquatch-telegraf
-
-To list the Telegraf connector Pod for a given connector instance (the connection name is the key used in the configuration, e.g. ``example``):
+To list the Telegraf connector Pods for all connector instances, run:
 
 .. code:: bash
 
-  kubectl -n sasquatch get pods -l app.kubernetes.io/instance=sasquatch-telegraf-<connector-name>
-  kubectl -n sasquatch get pods -l app.kubernetes.io/instance=sasquatch-telegraf-example
+  kubectl get pods \
+  --namespace sasquatch \
+  --selector app.kubernetes.io/name=sasquatch-telegraf
+
+To list the Telegraf connector Pod for a given connector instance:
+
+.. code:: bash
+
+  kubectl get pods \
+  --namespace sasquatch \
+  --selector app.kubernetes.io/instance=sasquatch-telegraf-<connector-name>
+
+For example, to list the Pods for the ``example`` connector:
+
+.. code:: bash
+
+  kubectl get pods \
+  --namespace sasquatch \
+  --selector app.kubernetes.io/instance=sasquatch-telegraf-example
+
 
 View connector logs
 -------------------
 
-To view the last few log entries from all Telegraf connectors, run:
+To view the most recent log entries from all Telegraf connectors:
 
 .. code:: bash
 
-  kubectl -n sasquatch logs -l app.kubernetes.io/name=sasquatch-telegraf
+  kubectl logs \
+  --namespace sasquatch \
+  --selector app.kubernetes.io/name=sasquatch-telegraf
 
-Use ``jq`` to format and filter the structured logs, for example to show only error messages:
-
-.. code:: bash
-
-  kubectl -n sasquatch logs -l app.kubernetes.io/name=sasquatch-telegraf | jq 'select(.level == "ERROR")'
-
-To view the logs from a single Telegraf connector instance, using ``-f`` to stream the logs during debugging:
-
+You can use ``jq`` to format and filter structured logs.
+For example, to show only error messages, run:
 
 .. code:: bash
 
-  kubectl -n sasquatch logs -l app.kubernetes.io/instance=sasquatch-telegraf-<connector-name> -f
-  kubectl -n sasquatch logs -l app.kubernetes.io/instance=sasquatch-telegraf-example -f
+  kubectl logs \
+  --namespace sasquatch \
+  --selector app.kubernetes.io/name=sasquatch-telegraf \
+  | jq 'select(.level == "ERROR")'
+
+To view the logs for a specific connector instance:
+
+.. code:: bash
+
+  kubectl logs \
+  --namespace sasquatch \
+  --selector app.kubernetes.io/instance=sasquatch-telegraf-<connector-name> \
+  --timestamps \
+  --tail=100
+
+For example, to view the logs for the ``example`` connector:
+
+.. code:: bash
+
+  kubectl logs \
+  --namespace sasquatch \
+  --selector app.kubernetes.io/instance=sasquatch-telegraf-example \
+  --timestamps \
+  --tail=100
 
 Stop connectors
 ---------------
@@ -136,13 +181,19 @@ To stop all Telegraf connectors you can scale the deployment down to zero replic
 
 .. code:: bash
 
-  kubectl -n sasquatch scale deploy -l app.kubernetes.io/name=sasquatch-telegraf --replicas=0
+  kubectl scale deploy \
+    --namespace sasquatch \
+    --selector app.kubernetes.io/name=sasquatch-telegraf \
+    --replicas=0
 
 To start the connectors again, scale the deployment back to one replica:
 
 .. code:: bash
 
-  kubectl -n sasquatch scale deploy -l app.kubernetes.io/name=sasquatch-telegraf --replicas=1
+  kubectl scale deploy \
+    --namespace sasquatch \
+    --selector app.kubernetes.io/name=sasquatch-telegraf \
+    --replicas=1
 
 Restart connectors
 ------------------
@@ -151,12 +202,14 @@ To restart all Telegraf connectors, run:
 
 .. code:: bash
 
-  kubectl -n sasquatch rollout restart deploy -l app.kubernetes.io/name=sasquatch-telegraf
+  kubectl rollout restart deploy \
+  --namespace sasquatch \
+  --selector app.kubernetes.io/name=sasquatch-telegraf
 
 Monitoring
-----------
+==========
 
-Telegraf internal metrics are recorded under the ``telegraf`` database in Sasquatch and provide information about memory and buffer usage, throughput as well as read and write errors for each connector instance.
+Telegraf internal metrics are recorded in the ``telegraf`` database in Sasquatch and provide information about memory and buffer usage, throughput as well as read and write errors for each connector instance.
 See the **Connectors** dashboard in Chronograf to monitor the Telegraf connectors.
 
 
