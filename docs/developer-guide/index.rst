@@ -26,4 +26,5 @@ A Sasquatch developer is responsible for maintaining the Sasquatch components an
 .. toctree::
    :caption: Troubleshooting
 
+   request-exceeded-time-limit-error
    context-deadline-exceeded-error
