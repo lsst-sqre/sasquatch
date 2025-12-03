@@ -23,6 +23,7 @@ A Sasquatch developer is responsible for maintaining the Sasquatch components an
    adding-subcharts
    backups
    monitoring
+   query-limits
 
 .. toctree::
    :caption: Troubleshooting
