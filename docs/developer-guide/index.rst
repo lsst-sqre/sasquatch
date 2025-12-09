@@ -24,6 +24,7 @@ A Sasquatch developer is responsible for maintaining the Sasquatch components an
    backups
    monitoring
    query-limits
+   license
 
 .. toctree::
    :caption: Troubleshooting
