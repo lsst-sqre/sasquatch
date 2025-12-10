@@ -13,7 +13,7 @@ InfluxDB Enterprise cluster and single-node instances require a valid license to
 Licenses are renewed annually.
 SLAC initiates the requisition process in early November, since existing licenses expire in early December.
 
-InfluxData delivers license files as JSON attachments via email.
+InfluxData delivers license files in JSON format via email.
 After receipt, they are uploaded to the LSST IT SQuaRE 1Password vault.
 Look for ``InfluxDB Enterprise Licenses`` entry in 1Password or create a new folder to store new license files.
 
