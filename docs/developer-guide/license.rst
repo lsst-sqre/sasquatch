@@ -44,8 +44,11 @@ Both USDF and Summit operate two InfluxDB Enterprise instances:
 License Installation
 --------------------
 
-Each environment assigned license file must be stored in the ``sasquatch`` Kubernetes secret under the key ``influxdb-enterprise-license``.
-The secret is mounted from a volume in the InfluxDB Enterprise meta Pods, a restart of the meta Pods is **not required** after updating the secret.
+Each environment assigned license file must be stored in the ``sasquatch`` Kubernetes secret under the keys ``influxdb-enterprise-active-license`` and  ``influxdb-enterprise-standby-license``.
+
+.. note::
+
+  The secret is mounted from a volume in the InfluxDB Enterprise meta Pods, a restart of the meta Pods is **not required** after updating the secret.
 
 Follow the Phalanx procedure to `update a static secret`_.
 
@@ -58,7 +61,14 @@ After updating the secret, verify that the license is present and recognized by 
 
 .. code-block:: bash
 
-  kubectl exec -it sasquatch-influxdb-enterprise-meta-0 -n sasquatch -- \
+  kubectl exec -it sasquatch-influxdb-enterprise-active-meta-0 -n sasquatch -- \
+  cat /var/run/secrets/influxdb/license.json
+
+and
+
+.. code-block:: bash
+
+  kubectl exec -it sasquatch-influxdb-enterprise-standby-meta-0 -n sasquatch -- \
   cat /var/run/secrets/influxdb/license.json
 
 You should see the JSON contents of the installed license file.
@@ -70,7 +80,7 @@ A successful load is indicated by a message similar to:
 
 .. code-block:: bash
 
-  kubectl logs sasquatch-influxdb-enterprise-meta-0 -n sasquatch
+  kubectl logs sasquatch-influxdb-enterprise-active-meta-0 -n sasquatch
 
   ts=2024-12-09T21:15:24.588979Z lvl=info msg="Reading InfluxDB Enterprise license locally" \
   log_id=0~KMKgvG001 service=licensing path=/var/run/secrets/influxdb/license.json
