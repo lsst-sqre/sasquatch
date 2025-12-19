@@ -25,6 +25,7 @@ A Sasquatch administrator is responsible for maintaining the Sasquatch component
    monitoring
    query-limits
    license
+   remote-context
 
 .. toctree::
    :caption: Troubleshooting
