@@ -1,4 +1,6 @@
-:og:description: Learn how to use sasquatch.
+:og:description: Learn how to use Sasquatch.
+
+.. _user-guide:
 
 ##########
 User guide
