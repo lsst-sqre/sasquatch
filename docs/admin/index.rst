@@ -1,13 +1,13 @@
-###############
-Developer guide
-###############
+##############
+Administrators
+##############
 
-This part of the Sasquatch documentation contains information primarily of interest to developers of Sasquatch itself.
-A Sasquatch developer is responsible for maintaining the Sasquatch components and its deployments.
+This part of the Sasquatch documentation contains information for Sasquatch administrators.
+A Sasquatch administrator is responsible for maintaining the Sasquatch components and its deployments.
 
 
 .. toctree::
-   :caption: Sasquatch architecture
+   :caption: Overview
 
    architecture
 
