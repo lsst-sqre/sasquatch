@@ -76,8 +76,8 @@ For example, data sent to the ``foo.bar`` topic at the Summit and replicated to 
 The database name ``foo`` corresponds to the Sasquatch namespace in the source cluster.
 See :ref:`namespaces` for more details.
 
-Enabling remote context in a Sasquatch
---------------------------------------
+Enabling remote context in Sasquatch
+------------------------------------
 
 Remote context is disabled by default in Sasquatch.
 To enable it in a Sasquatch environment, follow these steps:
