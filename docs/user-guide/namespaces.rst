@@ -4,7 +4,7 @@
 Namespaces
 ##########
 
-Namespaces are used to organize and data from various sources in Sasquatch.
+Namespaces are used to organize data from various sources in Sasquatch.
 
 Use the ``lsst.{system}.{topic}`` convention for the full qualified name of your metrics or telemetry topics in Sasquatch.
 
