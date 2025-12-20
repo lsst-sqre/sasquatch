@@ -27,7 +27,7 @@ The topic prefix corresponds to the source cluster alias configured in MirrorMak
     source:
       alias: "summit"
       bootstrapServer: sasquatch-summit-kafka-bootstrap.lsst.codes:9094
-      topicsPattern: "registry-schemas, Test.*"
+      topicsPattern: "registry-schemas, foo.bar"
     replication:
       policy:
         separator: "."
@@ -48,7 +48,7 @@ Telegraf configuration for remote topics
 ----------------------------------------
 
 Telegraf connectors can be configured explicitly to consume remote topics using the remote Schema Registry.
-For example, for the remote topic ``summit.Test`` the Telegraf connector configuration would be as follows:
+For example, for the remote topic ``summit.foo.bar`` the Telegraf connector configuration would be as follows:
 
 .. code:: yaml
 
@@ -57,11 +57,11 @@ For example, for the remote topic ``summit.Test`` the Telegraf connector configu
     registry:
       url: "http://sasquatch-schema-registry-remote.sasquatch:8081"
     kafkaConsumers:
-      test:
+      foo-bar-remote:
         enabled: true
-        database: "test"
+        database: "foo"
         topicRegexps: |
-          [ "summit.Test" ]
+          [ "summit.foo.bar" ]
 
 InfluxDB measurement name consistency
 -------------------------------------
@@ -71,8 +71,10 @@ Kafka topics are mapped to InfluxDB measurements by Telegraf.
 Even though the remote context uses a new naming convention for remote topics, InfluxDB measurement names must remain unchanged.
 This ensures the InfluxDB queries work across the source and target environments.
 
-For example, data sent to the ``Test`` topic in Summit and replicated to USDF in the ``summit.Test`` topic will be stored in the ``Test`` measurement in InfluxDB in both environments.
+For example, data sent to the ``foo.bar`` topic at the Summit and replicated to the ``summit.foo.bar`` topic at USDF is stored in the ``foo`` database and ``foo.bar`` measurement in InfluxDB in both environments.
 
+The database name ``foo`` corresponds to the Sasquatch namespace in the source cluster.
+See :ref:`namespaces` for more details.
 
 Enabling remote context in a Sasquatch
 --------------------------------------
