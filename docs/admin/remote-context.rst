@@ -68,12 +68,10 @@ InfluxDB measurement name consistency
 
 Kafka topics are mapped to InfluxDB measurements by Telegraf.
 
-Despite the naming convention in Kafka for remote topics, the InfluxDB measurement names must be preserved.
-This is possible because Telegraf uses the topic name (from the Avro schema) to determine the InfluxDB measurement name.
+Even though the remote context uses a new naming convention for remote topics, InfluxDB measurement names must remain unchanged.
+This ensures the InfluxDB queries work across the source and target environments.
 
 For example, data sent to the ``Test`` topic in Summit and replicated to USDF in the ``summit.Test`` topic will be stored in the ``Test`` measurement in InfluxDB in both environments.
-
-This ensures the InfluxDB queries work across the source and target environments.
 
 
 Enabling remote context in a Sasquatch
