@@ -17,7 +17,7 @@ The configuration is specified in each Sasquatch environment in ``sasquatch/valu
 In this section we cover the configuration options used in the ``example`` connector.
 For the complete set of configuration options see the `telegraf`_ subchart documentation.
 
-The ``example`` connector writes data for the ``skyFluxMetric`` metric (see :ref:`avro`) to InfluxDB.
+The ``example`` connector writes data for the ``skyFluxMetric`` metric (see :ref:`avro-schemas`) to InfluxDB.
 Here is the ``example`` connector configuration:
 
 .. code:: yaml

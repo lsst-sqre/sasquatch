@@ -1,11 +1,13 @@
-.. _avro:
+.. _avro-schemas:
 
 ############
 Avro schemas
 ############
 
-Sasquatch uses Avro as serialization format.
-An advantage of Avro is that it provides a schema and supports schema evolution with the help of the `Confluent Schema Registry`_.
+Sasquatch uses `Avro`_ as serialization format.
+Avro is a binary format, it provides a schema for the data and supports schema evolution via the `Confluent Schema Registry`_.
+
+This guide describes how to define Avro schemas for your data and how to use them in Sasquatch.
 
 For example, assume a metric named ``skyFluxMetric`` with the following data:
 
@@ -51,7 +53,8 @@ A simple Avro schema for this metric would look like this:
         ]
     }
 
-The :ref:`namespace <namespaces>` and the metric name are used to create the full qualified metric name in Sasquatch, ``lsst.example.skyFluxMetric``, which also corresponds to the Kafka topic name.
+The :ref:`namespace <namespaces>` and the metric name are used to create the full qualified name ``lsst.example.skyFluxMetric``.
+The full qualified name is also corresponds to the Kafka topic name.
 The schema is stored in the Schema Registry and is used to validate the data sent to Sasquatch.
 
 Read more about Avro schemas and types in the `Avro specification`_.
@@ -59,9 +62,11 @@ Read more about Avro schemas and types in the `Avro specification`_.
 Adding units and description
 ============================
 
-Adding units and description is recommended and they are used by the EFD client ``.get_schema()`` method to display this information and help users to understand the data.
+It is recommended to add units and description to the schema.
+Some clients like the EFD client can display this information to help users understand the data.
 
-The convention in Sasquatch is to add the ``units`` and ``description`` keys in every field of the schema, and `astropy units`_ whenerver possible.
+The convention in Sasquatch is to add the ``units`` and ``description`` keys in every field of the schema.
+Use `astropy units`_ whenever possible.
 
 .. code:: json
 
@@ -104,14 +109,14 @@ The convention in Sasquatch is to add the ``units`` and ``description`` keys in 
         ]
     }
 
-.. _astropy units: https://docs.astropy.org/en/stable/units/
+Default values
+==============
 
-Optional fields
-===============
+In Avro it is possible to provide a default value for fields, however it is only used during schema evolution, for example, when a new field is added to the schema and old data is read.
+Not that it doesn't make the field optional at encoding time, so when sending data to Sasquatch all fields defined in the schema must be present, even if they have a default value.
 
-In some situations, you don’t have values for all the fields defined in the schema.
-In this case you can mark the field as optional and provide a default value.
-Sasquatch uses the Avro null value for nullable fields, and the schema for a nullable field uses the `Union`_ type:
+The convention in Sasquatch is to use the Avro ``null`` value as default value.
+The schema uses the `Union`_ type:
 
 .. code:: json
 
@@ -123,28 +128,23 @@ Note that because of the union type, when sending data to Sasquatch this will no
 
     {"meanSky": 2328.906}
 
-Intead, you must do this:
+Instead use the following format for fields with default values:
 
 .. code:: json
 
     {"meanSky": {"float": 2328.906}}
 
-.. _Union: https://avro.apache.org/docs/1.11.1/specification/#unions
-
 Schema evolution
 ================
 
-In Sasquatch, schema changes must be *forward-compatible* so that consumers won't break.
-Sasquatch consumers include Kafka consumers, any application that queries InfluxDB, and Chronograf dashboards.
+In Sasquatch, schema changes should be *forward-compatible* so that consumers won't break.
+Sasquatch consumers include Kafka consumers like Telegraf, any application that queries InfluxDB, and Chronograf dashboards.
 
 Forward compatibility means that data produced with a new schema can be read by consumers using the previous schema.
-An example of a forward-compatible schema change is adding a new field to the schema.
-Removing or renaming an existing field are examples of non forward-compatible schema changes.
+An example of a forward-compatible schema change is adding a new field to the schema with a default value, so that old consumers can ignore the new field and new consumers can use the default value when reading old data.
+Removing or renaming existing fields are examples of non forward-compatible schema changes.
 
 Read more about forward compatibility in the `Confluent Schema Registry`_ documentation.
-
-.. _Confluent Schema Registry: https://docs.confluent.io/platform/current/schema-registry/fundamentals/avro.html#forward-compatibility
-
 
 Suppose there's a dashboard in Chronograf with a chart that displays a time series of ``meanSky`` and ``stdevSky`` values grouped by ``band``.
 The ``timestamp``, ``band``, ``meanSky`` and ``stdevSky`` fields are always required for that chart to work.
@@ -181,7 +181,11 @@ The following Avro schema will ensure these fields are always present:
     }
 
 Now, suppose you want to add a table linked to the previous chart to display the visit ID associated with this metric.
-Adding the ``visit`` field to the schema is a *forward-compatible* change, so that's allowed:
+Adding the ``visit`` field to the schema is a *forward-compatible* change.
+
+Additionally, adding the ``visit`` field with a default value will ensure that old messages can still be read by new consumers.
+
+The new schema will look like this:
 
 .. code:: json
 
@@ -204,7 +208,7 @@ Adding the ``visit`` field to the schema is a *forward-compatible* change, so th
             },
             {
                 "name": "visit",
-                "type": "int"
+                "type": ["null", "int"], "default": null}
             },
             {
                 "name": "meanSky",
@@ -217,8 +221,7 @@ Adding the ``visit`` field to the schema is a *forward-compatible* change, so th
         ]
     }
 
-New messages sent to Sasquatch now require the ``visit`` field and a new query that uses the ``visit`` information can be implemented.
-Because this is a forward-compatible schema change, existing queries won't break since they don't use the ``visit`` field.
+New messages sent to Sasquatch now require the ``visit`` field and a new consumers that use the ``visit`` information can be implemented.
+Because the visit field has a default value, new consumers can still read old messages that don't have the ``visit`` field.
 
 
-.. _Avro specification: https://avro.apache.org/docs/1.11.1/specification/
