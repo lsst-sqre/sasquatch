@@ -4,21 +4,15 @@
 Dashboards
 ##########
 
-This section collects best practices for creating dashboards in Chronograf based on our experience at Rubin Observatory.
+This guide collects best practices for creating dashboards in Chronograf based on our experience at Rubin Observatory.
 
-Read more on how to create dashboards in the `Chronograf documentation`_.
-
-.. _Chronograf documentation: https://docs.influxdata.com/chronograf/v1.10/guides/create-a-dashboard/#build-a-dashboard
+Read more about creating dashboards in the `Chronograf documentation`_.
 
 Visualization types
 ===================
 
-See the `visualization types`_ avaibale in Chronograf.
-
-.. _visualization types: https://docs.influxdata.com/chronograf/v1.10/guides/visualization-types/
-
 Time series of physical variables like temperature, pressure, etc are correlated data points.
-For this type of data prefer using a line graph or a line graph + single stat visualization types.
+For this type of data prefer using a line graph or a line graph + single stat visualization.
 The single stat always corresponds to the most recent value in the time series.
 
 Time series of uncorrelated data like events are better visualized using the bar chart visualization type.
@@ -26,37 +20,28 @@ Time series of uncorrelated data like events are better visualized using the bar
 In general, the best way to identify the best visualization type is by questioning the data.
 Bar charts are also useful to visualize gaps in the data.
 
-Write efficient dashboard queries
-=================================
+Writing efficient dashboard queries
+===================================
 
-Dashboard queries are used to build visualizations in Chronograf.
-You can write dashboard queries in InfluxQL and Flux.
-This section covers the basics of InfluxQL a SQL-like query language for InfluxDB.
-The :ref:`advanced` section introduces the use of Flux for creating dashboards.
+This section covers the basics of the InfluxQL and Flux query languages creating dashboards in Chronograf.
 
-.. note::
-
-   Keep in mind that a single dashboard might execute tens or even hundreds of queries.
-   These queries need to return fast specially if dashboards are configured to refresh every few seconds.
+A single Chronograf dashboard might execute a large number  queries.
+These queries need to return fast specially if dashboards are configured to refresh every few seconds.
 
 When creating dashboard queries always constrain the queries by a time range.
-You will notice that the query editor automatically adds the following clause for you:
+You will notice that the query editor automatically adds the following for you:
 
 .. code:: sql
 
    WHERE time > :dashboardTime: AND time < :upperDashboardTime:
 
 these are pre-defined template variables that correspond to the time range configured in the date picker.
-This way your charts will respond consistently when changing the time range in the date picker, but more importantly, queries constrained by time return faster in InfluxDB.
+This way your charts will respond consistently when changing the time range in the date picker.
 
-Consider using aggregation functions like ``mean()`` to sample the time series in an appropriate time grid using the clause:
+Consider using aggregation functions like ``mean()`` to sample the time series in an appropriate time intervals using ``GROUP BY time(:interval:)``.
 
-.. code:: sql
-
-   GROUP BY time(:interval:)
-
+The idea behind the ``:interval:`` template variable is that you don't need to return high resolution data if you want to visualize large time ranges.
 Chronograf will automatically set the value of ``:interval:`` based on the selected time range.
-The idea behind the ``:interval:`` template variable is that you don't need to return high resolution data for visualization if you select a large time range.
 
 Use the :guilabel:`Show template values` button in the query editor UI to inspect the actual values of template variables in your query.
 
@@ -64,15 +49,12 @@ Use custom template variables to build interactive dashboards
 =============================================================
 
 When creating a dashboard, you can create custom template variables to parametrize your queries and visualizations.
-With custom template variables you can create interactive dashboards, when you create a template variable it becomes available
-in the Chronograf UI for selection.
+With custom template variables you can create interactive dashboards.
 
 Any substring in your query can be parametrized by template variables.
-
 A typical use of template variables is to label a particular time range of interest corresponding to a test performed at the observatory or to an event.
 
-See the `M2 Functional Testing`_ dashboard for an example.
-There, a ``Map`` template variable maps the test name to the time range when the test was performed.
+For example, the `M2 Functional Testing`_ dashboard uses a ``Map`` template variable to create a mapping of the test name to the time range the test was performed.
 The query looks like:
 
 .. code:: sql
@@ -95,40 +77,23 @@ Then, by selecting ``m2 actuator stroke A4 test`` in the UI, you jump straight t
 
 Read more about `custom template variables`_ in the Chronograf documentation  .
 
-.. _custom template variables: https://docs.influxdata.com/chronograf/v1.10/guides/dashboard-template-variables/#use-template-variables
-.. _M2 Functional Testing: https://usdf-rsp.slac.stanford.edu/chronograf/sources/1/dashboards/6
 
-
-Display multiple graphs in one chart
-====================================
+Displaying multiple graphs in one chart
+=======================================
 
 Sometimes it is useful to display multiple graphs in a single chart.
 Additional graph queries can be added by using the ``+`` button in the query editor.
-
-Strip charts
-============
 
 Multiple time series charts (strip charts) are better visualized if the time axis is aligned.
 To align the time axis use the ``GROUP BY time(:interval:)`` clause with the same ``:interval:`` in each chart query to sample the data in the same time grid.
 
 
-Use linked tables to correlate metrics and events
-=================================================
+Using linked tables to correlate metrics and events
+===================================================
 
-An easy way to visualize events and correlate them with metrics or telemetry data is by using a linked table.
+An easy way to visualize events and correlate them with metrics or telemetry data is by using linked tables.
 In Chronograf, tables are linked to charts via the time column.
 
-
-.. note::
-
-   Chronograf provides a `log viewer`_ tool that could be used to visualize CSC log events.
-   To use the log viewer tool in Chronograf, data needs to be recorded in a specific measurement and follow the syslog data format.
-   DM-31618 explores this possibility.
-
-
-.. _log viewer: https://docs.influxdata.com/chronograf/v1.10/guides/analyzing-logs/
-
-.. _advanced:
 
 Advanced dashboards with Flux
 =============================
@@ -139,7 +104,6 @@ Flux is good for querying and combining fields from multiple InfluxDB measuremen
 
 This section walks you through the Flux code used to create the table in the `MT CSC State Transitions`_ dashboard.
 
-.. _MT CSC State Transitions: https://usdf-rsp.slac.stanford.edu/chronograf/sources/1/dashboards/12
 
 The following will query the ``efd`` in the selected time range and use the ``filter()`` function to get the ``summaryState`` field from the all the measurements that match the ``lsst.sal.MT.*.logevent_summaryState`` regexp.
 
@@ -240,5 +204,5 @@ Known limitations
 
 - When adding multiple graphs to one chart, it is not possible to combine different visualization types.
 
-- There's no solution yet to display units in Chronograf charts other than manually adding a suffix to the y-axis label.
-  Units can be obtained from the Kafka topic schema using the EFD client.
+- There's no solution yet to display units in Chronograf charts.
+  Units can be obtained from the Kafka topic schema using the `EFD client`_ ``get_schema()`` method, but they need to be added manually to the y-axis label in Chronograf.
