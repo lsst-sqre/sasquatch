@@ -1,19 +1,17 @@
 .. _chronograf:
 
-########
-Overview
-########
+##########
+Chronograf
+##########
 
-Chronograf serves as the primary user interface (UI) for data exploration, dashboard creation, and alerts in Sasquatch.
+Chronograf is the primary UI for querying and visualizing the telemetry data and metrics stored in Sasquatch.
+It provides a user-friendly interface for exploring the data, creating custom dashboards, and setting up alerts.
 
-At present, Sasquatch operates on Chronograf version 1.9.4.
-Within the Sasquatch ecosystem, the Chronograf UI offers the following functionalities:
+See :ref:`environments` for the Chronograf URL for each Sasquatch environment.
 
-1. Enables users to browse telemetry topics and metrics within existing databases and provides a convenient data exploration tool for visualizing data swiftly.
-2. Facilitates the creation of custom dashboards, which can be shared or utilized in presentation mode to monitor telemetry, metrics, and events effectively.
-3. Allows users to generate threshold, relative, and deadman alerts and send notifications to a designated Slack channel.
+Chronograf :ref:`organizations` are used to group related dashboards, for example dashboards for "Observatory Telemetry" or "Pipeline Metrics".
 
-For further information on Chronograf, you can refer to this guide and the official `Chronograf documentation`_.
+See the :ref:`explore` and :ref:`dashboards` guides for best practices on using Chronograf within Rubin Observatory.
 
-.. _Chronograf documentation: https://docs.influxdata.com/chronograf/v1.10
+For further information on Chronograf, refer to the official `Chronograf documentation`_.
 
