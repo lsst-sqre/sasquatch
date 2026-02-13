@@ -1,27 +1,40 @@
-.. _influxdbapi:
+.. _influxdb-api:
 
-############################
-Querying the InfluxDB v1 API
-############################
+############
+InfluxDB API
+############
 
-In the :ref:`EFD Client <efdclient>` section, we discussed how to access EFD data using the EFD Python client from a notebook in the RSP.
+This guide describes how to access the InfluxDB API, which can be useful for services or applications that need to query data stored in Sasquatch.
 
-For services or applications that need to access EFD data, the recommended method is to query the `InfluxDB v1 API`_ directly.
+InfluxDB connection information
+-------------------------------
 
-For example, to query the InfluxDB v1 API at USDF, you need the following information:
-
-- The ``INFLUXDB_URL`` is the URL of the InfluxDB server. For the USDF environment, the URL is ``https://usdf-rsp.slac.stanford.edu/influxdb-enterprise-data``.
-- The ``INFLUXDB_DATABASE`` is the name of the database you want to query. For the EFD database, the name is ``efd``.
-- The ``INFLUXDB_USER`` and ``INFLUXDB_PASSWORD`` are the credentials for accessing the database and can be obtained from the LSSTIT SQuare Vault in 1Password under "EFD reader at USDF".
+From the Rubin Science Platform, list the InfluxDB databases available in your environment with:
 
 .. code::
 
-  INFLUXDB_URL = https://usdf-rsp.slac.stanford.edu/influxdb-enterprise-data
-  INFLUXDB_DATABASE = "efd"
-  INFLUXDB_USER = ""
-  INFLUXDB_PASSWORD = ""
+    from lsst.rsp list_influxdb_labels
 
-You can use the InfluxDB API ``/query`` endpoint to query data using `InfluxQL`_.
+    list_influxdb_labels()
+
+This returns a list of database labels that you can use to retrieve connection information using the `Repertoire`_ service discovery.
+You can retrieve the connection information with:
+
+.. code:: Python
+
+    from lsst.rsp import get_influxdb_credentials
+
+    get_influxdb_credentials("<database_label>")
+
+To query the InfluxDB v1 API, you need the InfluxDB API URL, the database name, and the username and password credentials to connect to the database.
+
+
+The InfluxDB API query endpoint
+-------------------------------
+
+Use the InfluxDB API ``/query`` endpoint to query data using the InfluxQL query language.
+See the `InfluxQL documentation`_ for more information on the supported query syntax and capabilities.
+
 Here is an example on how to query the InfluxDB v1 API using the Python requests module.
 
 .. code:: python
@@ -36,13 +49,13 @@ Here is an example on how to query the InfluxDB v1 API using the Python requests
       Parameters
       ----------
       url : str
-          The URL of the InfluxDB API.
+          The InfluxDB API URL
       database_name : str
           The name of the database to query.
       username : str, optional
-          The username to authenticate with.
+          The username to connect to the database.
       password : str, optional
-          The password to authenticate with.
+          The password to connect to the database.
       """
 
       def __init__(
@@ -67,21 +80,23 @@ Here is an example on how to query the InfluxDB v1 API using the Python requests
               raise InfluxDBError(f"An error occurred: {exc}") from exc
 
 
-  client = InfluxDBClient(
-      url=INFLUXDB_URL,
-      database_name=INFLUXDB_DATABASE,
-      username=INFLUXDB_USER,
-      password=INFLUXDB_PASSWORD,
-  )
+The InfluxDB API response format
+--------------------------------
 
+The following example illustrates how to use the InfluxDB client to send a query to the InfluxDB API and the expected response format.
+
+.. code:: python
+
+  # Instantiate the InfluxDB client with the appropriate connection information
+  client = InfluxDBClient()
+
+  # Example query to the InfluxDB API
   response = client.query(
-      """SELECT vacuum FROM "lsst.sal.ATCamera.vacuum" WHERE time > now() - 1d"""
+      """SELECT vacuum FROM "lsst.sal.ATCamera.vacuum" WHERE time > now() - 1h"""
   )
 
-The InfluxDB v1 API response format
-===================================
-
-The InfluxDB v1 API response is a JSON object with the following structure:
+The above query retrieves the ``vacuum`` measurements for the ``ATCamera`` in the last hour, using the InfluxQL ``now()`` function to specify a time range relative to the server's current time.
+The InfluxDB API response is a JSON object with the following structure:
 
 .. code:: json
 
@@ -110,12 +125,13 @@ You can query multiple topics in a single request as well.
 If you query a single topic like above the result will have a single ``series``.
 
 
-Converting the InfluxDB v1 API response to a Pandas DataFrame
--------------------------------------------------------------
+Converting the InfluxDB API response to a Pandas DataFrame
+----------------------------------------------------------
 
 To convert the InfluxDB v1 API response to a Pandas DataFrame, you can use the following code, assuming you are sending a single query
 and querying a single topic at a time like in the example above.
-The result is equivalent to the Pandas DataFrame you would get from the EFD Python client.
+
+The result is equivalent to the Pandas DataFrame you would get when using the EFD client.
 
 .. code:: python
 
@@ -146,7 +162,3 @@ The result is equivalent to the Pandas DataFrame you would get from the EFD Pyth
       if "name" in series:
           result.name = series["name"]
       return result
-
-
-.. _InfluxDB v1 API: https://docs.influxdata.com/influxdb/v1/tools/api/
-.. _InfluxQL: https://docs.influxdata.com/influxdb/v1/query_language/spec/
