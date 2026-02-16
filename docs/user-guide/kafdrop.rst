@@ -10,4 +10,3 @@ Kafdrop also displays information about the brokers, topic configuration, consum
 
 See :ref:`environments` for the kafdrop URL in each Sasquatch environment.
 
-.. _kafdrop: https://github.com/obsidiandynamics/kafdrop
