@@ -1,16 +1,15 @@
-.. _directconnection:
+.. _direct-connection:
 
 ############################
 Connecting directly to Kafka
 ############################
 
-In some cases, you need to connect directly to Kafka to produce and consume messages (vs. going through the :ref:`rest-proxy`), like when publishing app metrics events, or when developing a `FastStream`_ app.
+In some cases, you may need to connect directly to Kafka to produce and consume messages instead of using the :ref:`rest-proxy`.
+
 This requires generating Kafka client credentials for the Sasquatch Kafka cluster and providing them to your app.
 
 Kafka provides `many different authentication options <https://docs.confluent.io/platform/current/security/authentication/overview.html>`__.
 This guide describes the the most secure and straightforward option, assuming that your app is running in the same Kubernetes cluster as the Sasquatch Kafka cluster.
-
-.. _FastStream: https://faststream.airt.ai/latest/
 
 Generating Kafka credentials
 ============================
@@ -25,15 +24,15 @@ You can generate Kafka credentials by creating a couple of `Strimzi`_ resources:
 * A `KafkaUser`_ resource, in the ``sasquatch`` namespace, to configure a user in the Kafka cluster and provision a Kubernetes Secret with that user's credentials
 * A `KafkaAccess`_ resource, in your app's namespace, to make those credentials and other Kafka connection information available to your app
 
-.. _Phalanx: https://phalanx.lsst.io
-.. _Strimzi: https://strimzi.io
-.. _KafkaUser: https://strimzi.io/docs/operators/latest/configuring.html#type-KafkaUser-reference
-.. _KafkaAccess: https://github.com/strimzi/kafka-access-operator
 
 Strimzi KafkaUser resource
 --------------------------
 
-Here's an example of a ``KafkaUser``, placed in the ``sasquatch`` namespace, with some of the common ACL rules you may want (more details about ACLs `here <https://docs.confluent.io/platform/current/security/authorization/acls/overview.html>`__):
+Here's an example of a ``KafkaUser`` with some of the common ACL rules you may want.
+More details about ACLs `here <https://docs.confluent.io/platform/current/security/authorization/acls/overview.html>`__):
+
+A Sasquatch subchart is the right place for creating this resource.
+See :ref:`adding-subcharts` for more details.
 
 .. code-block:: yaml
 
@@ -174,4 +173,3 @@ If your app is a `Safir`_ app, you can use the `Safir Kafka helpers <https://saf
              # your app's namespace
              secretName: myapp-kafka
 
-.. _Safir: https://safir.lsst.io

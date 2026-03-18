@@ -10,6 +10,9 @@ disable_primary_sidebars = [
     "index",
     "changelog",
 ]
+rst_epilog_file = "_rst_epilog.rst"
+
+
 extensions = [
     "sphinxcontrib.youtube",
 ]

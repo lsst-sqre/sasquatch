@@ -10,14 +10,14 @@ This guide describes how to configure and deploy Telegraf connectors, manage the
 Configuration
 =============
 
-Telegraf is deployed by the `telegraf`_ subchart and uses the `Kafka consumer`_ plugin with the Avro parser and the `InfluxDB v1`_ output plugin.
+Telegraf is deployed by the `telegraf subchart`_ and uses the `Kafka consumer`_ plugin with the Avro parser and the `InfluxDB v1`_ output plugin.
 
 The configuration is specified in each Sasquatch environment in ``sasquatch/values-<environment>.yaml``.
 
 In this section we cover the configuration options used in the ``example`` connector.
-For the complete set of configuration options see the `telegraf`_ subchart documentation.
+For the complete set of configuration options see the `telegraf subchart`_ documentation.
 
-The ``example`` connector writes data for the ``skyFluxMetric`` metric (see :ref:`avro`) to InfluxDB.
+The ``example`` connector writes data for the ``skyFluxMetric`` metric (see :ref:`avro-schemas`) to InfluxDB.
 Here is the ``example`` connector configuration:
 
 .. code:: yaml
@@ -216,4 +216,4 @@ See the **Connectors** dashboard in Chronograf to monitor the Telegraf connector
 .. _InfluxDB v1: https://github.com/influxdata/telegraf/blob/master/plugins/outputs/influxdb/README.md
 .. _Kafka consumer: https://github.com/influxdata/telegraf/blob/master/plugins/inputs/kafka_consumer/README.md
 .. _InfluxDB schema design and data layout: https://docs.influxdata.com/influxdb/v1/concepts/schema_and_data_layout
-.. _telegraf: https://github.com/lsst-sqre/phalanx/tree/main/applications/sasquatch/charts/telegraf/README.md
+.. _telegraf subchart: https://github.com/lsst-sqre/phalanx/tree/main/applications/sasquatch/charts/telegraf/README.md

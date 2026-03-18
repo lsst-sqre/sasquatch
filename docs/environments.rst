@@ -87,7 +87,7 @@ IDF
 ---
 
 Sasquatch production environment for the community science platform in Google Cloud.
-This instance is mainly used for :ref:`application metrics<appmetrics>`.
+This instance is mainly used for :ref:`application metrics<app-metrics>`.
 
 Intended audience: Project staff.
 
