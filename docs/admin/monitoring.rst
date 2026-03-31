@@ -20,6 +20,7 @@ Summit
 **InfluxDB**
    - `Summit InfluxDB CPU and Memory usage, network <https://grafana.ls.lsst.org/d/6581e46e4e5c7ba40a07646515ef7b35/kubernetes-compute-resources-pod?orgId=1&from=now-1h&to=now&timezone=utc&var-datasource=default&var-cluster=yagan.cp&var-namespace=sasquatch&var-pod=sasquatch-influxdb-enterprise-data-0&refresh=10s>`_
    - `Summit InfluxDB writes and query load <https://summit-lsp.lsst.codes/chronograf/sources/1/dashboards/636?refresh=Paused&lower=now%28%29%20-%2024h>`_
+   - `Slow Summit EFD queries in the last 24h <https://grafana.ls.lsst.org/d/afnpxzm/sasquatch-slow-queries?orgId=1&from=now-24h&to=now&timezone=utc>`_
 
 USDF
 ----
@@ -34,7 +35,7 @@ USDF
 **InfluxDB**
    - `USDF InfluxDB CPU and Memory usage, network <https://grafana.slac.stanford.edu/d/dd71bcda-7744-4a86-bb10-f3cb65a1255c/kubernetes-workload-state?var-bin=2m&orgId=1&from=now-1h&to=now&timezone=America%2FLos_Angeles&var-node=$__all&var-namespace=vcluster--usdf-rsp&var-topk=10&var-filter_by_pod=sasquatch-influxdb-enterprise-active.%2A&var-filter_by_container=.%2A>`_
    - `USDF InfluxDB writes and query load <https://usdf-rsp.slac.stanford.edu/chronograf/sources/1/dashboards/67?refresh=Paused&lower=now%28%29%20-%2024h>`_
-   - `Slow queries in the last 24h <https://grafana.slac.stanford.edu/d/ff43qxi8owpa8e/sasquatch-slow-queries?orgId=1&from=now-24h&to=now&timezone=browser>`_
+   - `Slow USDF EFD queries in the last 24h <https://grafana.slac.stanford.edu/d/ff43qxi8owpa8e/sasquatch-slow-queries?orgId=1&from=now-24h&to=now&timezone=utc>`_
 
 
 Summit - USDF connection
