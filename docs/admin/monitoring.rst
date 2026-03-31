@@ -20,6 +20,7 @@ Summit
 **InfluxDB**
    - `Summit InfluxDB CPU and Memory usage, network <https://grafana.ls.lsst.org/d/6581e46e4e5c7ba40a07646515ef7b35/kubernetes-compute-resources-pod?orgId=1&from=now-1h&to=now&timezone=utc&var-datasource=default&var-cluster=yagan.cp&var-namespace=sasquatch&var-pod=sasquatch-influxdb-enterprise-data-0&refresh=10s>`_
    - `Summit InfluxDB writes and query load <https://summit-lsp.lsst.codes/chronograf/sources/1/dashboards/636?refresh=Paused&lower=now%28%29%20-%2024h>`_
+   - `Slow queries in the last 24h <https://grafana.ls.lsst.org/d/afnpxzm/sasquatch-slow-queries?orgId=1&from=now-24h&to=now&timezone=utc>`_
 
 USDF
 ----
