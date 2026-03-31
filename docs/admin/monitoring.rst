@@ -35,7 +35,7 @@ USDF
 **InfluxDB**
    - `USDF InfluxDB CPU and Memory usage, network <https://grafana.slac.stanford.edu/d/dd71bcda-7744-4a86-bb10-f3cb65a1255c/kubernetes-workload-state?var-bin=2m&orgId=1&from=now-1h&to=now&timezone=America%2FLos_Angeles&var-node=$__all&var-namespace=vcluster--usdf-rsp&var-topk=10&var-filter_by_pod=sasquatch-influxdb-enterprise-active.%2A&var-filter_by_container=.%2A>`_
    - `USDF InfluxDB writes and query load <https://usdf-rsp.slac.stanford.edu/chronograf/sources/1/dashboards/67?refresh=Paused&lower=now%28%29%20-%2024h>`_
-   - `Slow queries in the last 24h <https://grafana.slac.stanford.edu/d/ff43qxi8owpa8e/sasquatch-slow-queries?orgId=1&from=now-24h&to=now&timezone=browser>`_
+   - `Slow queries in the last 24h <https://grafana.slac.stanford.edu/d/ff43qxi8owpa8e/sasquatch-slow-queries?orgId=1&from=now-24h&to=now&timezone=utc>`_
 
 
 Summit - USDF connection
