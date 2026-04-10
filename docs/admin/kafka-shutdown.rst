@@ -18,7 +18,7 @@ To do so, follow these steps:
 
    .. code:: bash
 
-      kubectl scale deploy --namespace sasquatch --selector app.kubernetes.io/name=sasquatch-telegraf --replicas=0
+      kubectl scale deploy -n sasquatch --selector app.kubernetes.io/name=sasquatch-telegraf --replicas=0
 
 3. Pause reconciliation of Strimzi resources.
    This will prevent the operator from restarting the pods after they are deleted.
@@ -56,5 +56,5 @@ To do so, follow these steps:
 
    .. code:: bash
 
-      kubectl scale deploy --namespace sasquatch --selector app.kubernetes.io/name=sasquatch-telegraf --replicas=1
+      kubectl scale deploy -n sasquatch --selector app.kubernetes.io/name=sasquatch-telegraf --replicas=1
 
