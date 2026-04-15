@@ -45,67 +45,30 @@ The InfluxDB API query endpoint
 Use the InfluxDB API ``/query`` endpoint to query data using the InfluxQL query language.
 See the `InfluxQL documentation`_ for more information on the supported query syntax and capabilities.
 
-Here is an example on how to query the InfluxDB v1 API using the Python requests module.
+The following example shows how to query the InfluxDB API:
 
 .. code:: python
 
-  import os
   import requests
 
+  influxdb_url = "https://usdf-rsp.slac.stanford.edu/influxdb-enterprise-data/"  # the URL of the InfluxDB API
+  database_name = "efd"  # the name of the database to query
+  auth = (
+      "username",
+      "password",
+  )  # the username and password credentials for authentication
 
-  class InfluxDBClient:
-      """A simple InfluxDB client.
+  query = """SELECT vacuum FROM "lsst.sal.ATCamera.vacuum" WHERE time > now() - 1h"""  # the InfluxQL query to send to the InfluxDB API
 
-      Parameters
-      ----------
-      url : str
-          The InfluxDB API URL
-      database_name : str
-          The name of the database to query.
-      username : str, optional
-          The username to connect to the database.
-      password : str, optional
-          The password to connect to the database.
-      """
-
-      def __init__(
-          self,
-          url: str,
-          database_name: str,
-          username: str | None = None,
-          password: str | None = None,
-      ) -> None:
-          self.url = url
-          self.database_name = database_name
-          self.auth = (username, password) if username and password else None
-
-      def query(self, query: str) -> dict:
-          """Send a query to the InfluxDB API."""
-          params = {"db": self.database_name, "q": query}
-          try:
-              response = requests.get(f"{self.url}/query", params=params, auth=self.auth)
-              response.raise_for_status()
-              return response.json()
-          except requests.exceptions.RequestException as exc:
-              raise InfluxDBError(f"An error occurred: {exc}") from exc
+  response = requests.get(
+      f"{influxdb_url}/query", params={"db": database_name, "q": query}, auth=auth
+  )
 
 
 The InfluxDB API response format
 --------------------------------
 
-The following example illustrates how to use the InfluxDB client to send a query to the InfluxDB API and the expected response format.
-
-.. code:: python
-
-  # Instantiate the InfluxDB client with the appropriate connection information
-  client = InfluxDBClient()
-
-  # Example query to the InfluxDB API
-  response = client.query(
-      """SELECT vacuum FROM "lsst.sal.ATCamera.vacuum" WHERE time > now() - 1h"""
-  )
-
-The above query retrieves the ``vacuum`` measurements for the ``ATCamera`` in the last hour, using the InfluxQL ``now()`` function to specify a time range relative to the server's current time.
+The above query retrieves the ``vacuum`` measurements for the ``ATCamera`` in the last hour.
 The InfluxDB API response is a JSON object with the following structure:
 
 .. code:: json
@@ -138,17 +101,17 @@ If you query a single topic like above the result will have a single ``series``.
 Converting the InfluxDB API response to a Pandas DataFrame
 ----------------------------------------------------------
 
-To convert the InfluxDB v1 API response to a Pandas DataFrame, you can use the following code, assuming you are sending a single query
+To convert the InfluxDB API response to a Pandas DataFrame, you can use the following code, assuming you are sending a single query
 and querying a single topic at a time like in the example above.
 
-The result is equivalent to the Pandas DataFrame you would get when using the EFD client.
+The result is equivalent to the Pandas DataFrame you would get when using the `EFD client`_.
 
 .. code:: python
 
   import pandas as pd
 
 
-  def _to_dataframe(self, response: dict) -> pd.DataFrame:
+  def to_dataframe(response: dict) -> pd.DataFrame:
       """Convert an InfluxDB response to a Pandas dataframe.
 
       Parameters
@@ -172,3 +135,6 @@ The result is equivalent to the Pandas DataFrame you would get when using the EF
       if "name" in series:
           result.name = series["name"]
       return result
+
+
+  to_dataframe(response.json())
