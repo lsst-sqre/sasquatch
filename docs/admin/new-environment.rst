@@ -95,7 +95,7 @@ Gather IP addresses and update Phalanx config
 #. Push these changes to your Phalanx branch and sync ``sasquatch`` in ArgoCD.
 
 .. _GCP: https://cloud.google.com
-.. _kafka bootstrap servers: https://kafka.apache.org/documentation/#producerconfigs_bootstrap.servers
+.. _kafka bootstrap servers: https://kafka.apache.org
 
 Provision DNS for TLS certificate
 =================================

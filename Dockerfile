@@ -1,45 +1,71 @@
-# Start from the InfluxDB Enterprise Meta image
-# This provides the InfluxDB Enterprise influxd-ctl command
-FROM influxdb:1.11.8-meta
+# This Dockerfile has three stages:
+#
+# base-image
+#   Updates the base Python image with security patches and common system
+#   packages. This image becomes the base of all other images.
+# install-image
+#   Installs dependencies and the application into a virtual environment.
+#   This virtual environment is ideal for copying across build stages.
+# runtime-image
+#   - Copies the virtual environment into place.
+#   - Runs a non-root user.
+#   - Sets up the entrypoint and port.
 
-# Install pipx and use it to install gsutil which is required for the backup script
-# to upload the backup files to Google Cloud Storage
-RUN apt-get update && \
-    apt-get install -y python3 python3-pip pipx jq && \
-    pipx install gsutil && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+FROM python:3.14.2-slim-trixie AS base-image
 
-# Add pipx bin directory to PATH
-ENV PATH="/root/.local/bin:$PATH"
+# Update system packages.
+COPY scripts/install-base-packages.sh .
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    ./install-base-packages.sh && rm ./install-base-packages.sh
 
-# Verify gsutil installation
-RUN gsutil --version
+FROM base-image AS install-image
 
-# Install kubectl
-RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
-    chmod +x kubectl && \
-    mv kubectl /usr/local/bin/
+# Install uv.
+COPY --from=ghcr.io/astral-sh/uv:0.9.21 /uv /bin/uv
 
-# Install influxd from InfluxDB OSS 1.11.8
-RUN mkdir influxdb-1.11.8 && \
-    curl -LO "https://download.influxdata.com/influxdb/releases/influxdb-1.11.8-linux-amd64.tar.gz" && \
-    tar xf influxdb-1.11.8-linux-amd64.tar.gz -C influxdb-1.11.8 && \
-    mv influxdb-1.11.8/influxd /usr/local/bin/ && \
-    rm -rf influxdb-1.11.8-linux-amd64.tar.gz
+# Install system packages only needed for building dependencies.
+COPY scripts/install-dependency-packages.sh .
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    ./install-dependency-packages.sh
 
-# Verify influxd installation
-RUN influxd version
+# Disable hard links during uv package installation since we're using a
+# cache on a separate file system.
+ENV UV_LINK_MODE=copy
 
-# Add the backup script
-COPY backup/backup.sh /usr/local/bin/backup.sh
-RUN chmod +x /usr/local/bin/backup.sh
+# Force use of system Python so that the Python version is controlled by
+# the Docker base image version, not by whatever uv decides to install.
+ENV UV_PYTHON_PREFERENCE=only-system
 
-# Create a new user to run the backup script
-RUN useradd --create-home sasquatch
+# Install the dependencies.
+WORKDIR /app
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-default-groups --compile-bytecode --no-install-project
+
+# Install the application itself.
+ADD . /app
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-default-groups --compile-bytecode --no-editable
+
+FROM base-image AS runtime-image
+
+# Create a non-root user.
+RUN useradd --create-home appuser
+
+# Copy the virtualenv.
+COPY --from=install-image /app/.venv /app/.venv
 
 # Switch to the non-root user.
-USER sasquatch
+USER appuser
 
-# Set the default command for the container
-CMD ["/usr/local/bin/backup.sh"]
+# Expose the port.
+EXPOSE 8080
+
+# Make sure we use the virtualenv.
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Run the application.
+CMD ["uvicorn", "example.main:app", "--host", "0.0.0.0", "--port", "8080"]

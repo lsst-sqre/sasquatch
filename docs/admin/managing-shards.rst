@@ -156,7 +156,7 @@ Finally, restart the InfluxDB data statefulset to reload the shards data and reb
 .. _storage engine: https://docs.influxdata.com/enterprise_influxdb/v1/concepts/storage_engine
 .. _filesystem layout: https://docs.influxdata.com/enterprise_influxdb/v1/concepts/file-system-layout/
 .. _Time-Structured Merge Tree (TSM): https://docs.influxdata.com/enterprise_influxdb/v1/concepts/
-.. _Anti-Entropy service: https://docs.influxdata.com/enterprise_influxdb/v1/concepts/anti_entropy_service/
+.. _Anti-Entropy service: https://docs.influxdata.com/enterprise_influxdb/v1/administration/configure/anti-entropy/
 .. _move shards: https://docs.influxdata.com/enterprise_influxdb/v1/features/clustering-features/#shard-movement
 .. _rebalancing: https://docs.influxdata.com/enterprise_influxdb/v1/administration/manage/clusters/rebalance/
 
