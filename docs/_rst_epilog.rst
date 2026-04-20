@@ -19,6 +19,7 @@
 .. _Repertoire: https://repertoire.lsst.io
 .. _Repertoire client: https://repertoire.lsst.io/user-guide/influxdb.html
 .. _Repertoire API documentation: https://usdf-rsp.slac.stanford.edu/repertoire/redoc#operation/get_influxdb_repertoire_discovery_influxdb__database__get
+.. _Getting InfluxDB connection information: https://repertoire.lsst.io/user-guide/influxdb.html
 
 .. _Kapacitor documentation: https://docs.influxdata.com/kapacitor/v1
 

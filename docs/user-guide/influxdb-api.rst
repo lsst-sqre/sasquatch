@@ -9,15 +9,29 @@ This guide describes how to access the InfluxDB API, which can be useful for ser
 InfluxDB connection information
 -------------------------------
 
-The InfluxDB API uses simple authentication based on username and password credentials, currently there is no support for token-based authentication.
+The InfluxDB API uses simple authentication based on username and password credentials.
+Currently, there is no support for token-based authentication.
 
 To query the InfluxDB API, you need the InfluxDB API URL, the database name, and the username and password credentials.
-The recommended way to retrieve this information from the RSP is using the `Repertoire client`_.
 
-Alternatively, you can retrieve the InfluxDB connection information directly from the Repertoire API endpoint  ``/repertoire/discovery/influxdb``.
-For example, to retrieve InfluxDB connection information for the ``usdf_efd`` database at USDF you can send a GET request to the following URL:
+If you are inside the RSP notebook aspect, you can find this information using the ``lsst.rsp`` package.
+For example, to retrieve InfluxDB connection information for the ``usdf_efd`` database:
 
-``https://usdf-rsp.slac.stanford.edu/repertoire/discovery/influxdb/usdf_efd``
+.. code:: python
+
+  from lsst.rsp import get_influxdb_credentials
+
+  info = get_influxdb_credentials("usdf_efd")
+
+If you are outside the RSP, the recommended way to retrieve this information is using the Repertoire client, see `Getting InfluxDB connection information`_ guide.
+
+Alternatively, you can also retrieve the InfluxDB connection information directly from the Repertoire API.
+For example, to retrieve InfluxDB connection information for the ``usdf_efd`` database, you can send a GET request to the following URL:
+
+``https://<repertoire-url>/discovery/influxdb/usdf_efd``
+
+where ``<repertoire-url>`` is the base URL for Repertoire.
+For Phalanx applications, the base URL for Repertoire can be obtained from ``global.repertoireUrl``.
 
 Since the returned information includes username and password credentials, this endpoint is protected and requires authentication using an access token.
 This may be a user token created through the token UI with ``"read:sasquatch"`` scope.
@@ -27,14 +41,13 @@ See the `RSP documentation`_ for more information.
 
   import requests
 
-  repertoire_url = (
-      "https://usdf-rsp.slac.stanford.edu/repertoire/discovery/influxdb/usdf_efd"
-  )
-  token = "..."  # obtained from somewhere else
+  database = "usdf_efd"  # the InfluxDB database to retrieve information for
+  repertoire_url = "..."  # the base URL for Repertoire, e.g. obtained from global.repertoireUrl in Phalanx
 
+  token = "..."  # obtained from somewhere else
   headers = {"content-type": "application/json", "Authorization": f"Bearer {token}"}
 
-  info = requests.get(f"{repertoire_url}", headers=headers)
+  info = requests.get(f"{repertoire_url}/discovery/influxdb/{database}", headers=headers)
 
 See `Repertoire API documentation`_ for more information about the returned information.
 
