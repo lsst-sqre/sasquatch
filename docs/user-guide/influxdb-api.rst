@@ -4,7 +4,11 @@
 InfluxDB API
 ############
 
-This guide describes how to access the InfluxDB API, which can be useful for services or applications that need to query InfluxDB directly without using the `EFD client`_.
+This guide explains how to query InfluxDB databases directly using the InfluxDB API.
+
+In most cases, the `EFD client`_ is the easiest and recommended way to query data from the EFD and other databases.
+
+If the client isn't available in your environment, or if you prefer a more lightweight method, you can use the InfluxDB API as an alternative.
 
 InfluxDB connection information
 -------------------------------
