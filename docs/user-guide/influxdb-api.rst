@@ -155,3 +155,30 @@ The result is equivalent to the Pandas DataFrame you would get when using the `E
 
 
   to_dataframe(response.json())
+
+
+Best practices for querying InfluxDB databases
+----------------------------------------------
+
+When querying InfluxDB databases, keep the following best practices in mind:
+
+1. Use the Repertoire client or API to retrieve InfluxDB connection information. This ensures your application can adapt to changes in the environment.
+
+2. Whenever possible, use the InfluxDB databases at USDF even if your application is running at the Summit (for example, ``usdf_efd`` instead of ``summit_efd``). These databases are intended for user queries and help reduce the impact on Summit operations.
+
+3. Avoid querying production InfluxDB databases during development. From a development environment (such as ``usdf-rsp-dev``), use Repertoire to discover connection details for a development database (for example, ``usdfdev_efd``).
+
+4. Write efficient InfluxQL queries. Use appropriate time ranges, filters, and functions to limit the amount of data returned and reduce load on the database. You can use the ``EXPLAIN ANALYZE`` command in InfluxQL to help diagnose query performance.
+
+5. Add comments to your InfluxQL statements to help identify the origin of queries in InfluxDB logs. For example:
+
+.. code:: sql
+
+  SELECT vacuum
+  FROM "lsst.sal.ATCamera.vacuum"
+  WHERE time > now() - 1h
+  /* source: my-application-name */
+
+
+
+

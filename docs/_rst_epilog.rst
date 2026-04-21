@@ -3,7 +3,10 @@
 .. _SAL interfaces: https://ts-xml.lsst.io/sal_interfaces/index.html
 
 .. _InfluxDB: https://docs.influxdata.com/enterprise_influxdb/v1/
+.. _InfluxQL queries: https://docs.influxdata.com/influxdb/v1/query_language/spec/
+.. _EXPLAIN ANALYZE: https://docs.influxdata.com/influxdb/v1/query_language/spec/#explain-analyze
 .. _InfluxQL documentation: https://docs.influxdata.com/influxdb/v1/query_language/
+.. _Use comments with InfluxQL statements: https://docs.influxdata.com/influxdb/v1/query_language/spec/#comments
 .. _tags versus fields: https://docs.influxdata.com/influxdb3/cloud-serverless/write-data/best-practices/schema-design/#tags-versus-fields
 .. _Flux documentation: https://docs.influxdata.com/influxdb/v1/flux/
 .. _Chronograf documentation: https://docs.influxdata.com/chronograf/v1
