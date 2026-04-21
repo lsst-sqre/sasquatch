@@ -4,29 +4,67 @@
 InfluxDB API
 ############
 
-This guide describes how to access the InfluxDB API, which can be useful for services or applications that need to query data stored in Sasquatch.
+This guide explains how to query InfluxDB databases directly using the InfluxDB API.
+
+In most cases, the `EFD client`_ is the easiest and recommended way to query data from the EFD and other databases.
+
+If the client isn't available in your environment, or if you prefer a more lightweight method, you can use the InfluxDB API as an alternative.
 
 InfluxDB connection information
 -------------------------------
 
-From the Rubin Science Platform, list the InfluxDB databases available in your environment with:
+The InfluxDB API uses simple authentication with a username and password.
+Token-based authentication is not currently supported.
 
-.. code::
+To query an InfluxDB database using the API, you will need the following connection details:
 
-    from lsst.rsp list_influxdb_labels
+- InfluxDB API URL
+- Database name
+- Username and password
 
-    list_influxdb_labels()
+If you are inside the RSP notebook aspect, you can find this information using the ``lsst.rsp`` package.
+For example, to retrieve InfluxDB connection information for the ``usdf_efd`` database:
 
-This returns a list of database labels that you can use to retrieve connection information using the `Repertoire`_ service discovery.
-You can retrieve the connection information with:
+.. code:: python
 
-.. code:: Python
+  from lsst.rsp import get_influxdb_credentials
 
-    from lsst.rsp import get_influxdb_credentials
+  get_influxdb_credentials("usdf_efd")
 
-    get_influxdb_credentials("<database_label>")
+If you are outside the RSP, the recommended way to retrieve this information is using the Repertoire client.
+See the `Getting InfluxDB connection information`_ guide.
 
-To query the InfluxDB v1 API, you need the InfluxDB API URL, the database name, and the username and password credentials to connect to the database.
+Alternatively, you can also retrieve the InfluxDB connection information directly from the Repertoire API.
+For example, to retrieve InfluxDB connection information for the ``usdf_efd`` database, you can send a GET request to the following URL:
+
+``https://<repertoire-url>/discovery/influxdb/usdf_efd``
+
+where ``<repertoire-url>`` is the base URL for Repertoire for your local environment.
+For Phalanx applications, the base URL for Repertoire can be obtained from ``global.repertoireUrl``.
+
+Since the returned information includes username and password credentials, this endpoint is protected and requires authentication using an access token.
+This may be a user token created through the token UI with ``"read:sasquatch"`` scope.
+See the `RSP documentation`_ for more information.
+
+.. code:: python
+
+  import requests
+
+  repertoire_url = "..."  # the base URL for Repertoire, e.g. obtained from global.repertoireUrl in Phalanx
+
+  token = "..."  # obtained from somewhere else
+  headers = {"content-type": "application/json", "Authorization": f"Bearer {token}"}
+
+  response = requests.get(
+      f"{repertoire_url}/discovery/influxdb/usdf_efd", headers=headers
+  )
+
+  response.raise_for_status()  # check for HTTP errors
+
+  info = response.json()  # Parse the JSON response into a Python dictionary
+
+
+See `Repertoire API documentation`_ for more information about the returned information.
 
 
 The InfluxDB API query endpoint
@@ -35,67 +73,35 @@ The InfluxDB API query endpoint
 Use the InfluxDB API ``/query`` endpoint to query data using the InfluxQL query language.
 See the `InfluxQL documentation`_ for more information on the supported query syntax and capabilities.
 
-Here is an example on how to query the InfluxDB v1 API using the Python requests module.
+The following example shows how to query the InfluxDB API:
 
 .. code:: python
 
-  import os
   import requests
 
+  influxdb_url = info.get("url")  # the URL of the InfluxDB API
+  database = info.get("database")  # the name of the InfluxDB database to query
+  auth = (
+      info.get("username"),
+      info.get("password"),
+  )  # the username and password credentials for authentication
 
-  class InfluxDBClient:
-      """A simple InfluxDB client.
+  query = """
+    SELECT vacuum
+    FROM "lsst.sal.ATCamera.vacuum"
+    WHERE time > now() - 1h
+    /* source: my-application-name */
+  """  # the InfluxQL query to send to the InfluxDB API
 
-      Parameters
-      ----------
-      url : str
-          The InfluxDB API URL
-      database_name : str
-          The name of the database to query.
-      username : str, optional
-          The username to connect to the database.
-      password : str, optional
-          The password to connect to the database.
-      """
-
-      def __init__(
-          self,
-          url: str,
-          database_name: str,
-          username: str | None = None,
-          password: str | None = None,
-      ) -> None:
-          self.url = url
-          self.database_name = database_name
-          self.auth = (username, password) if username and password else None
-
-      def query(self, query: str) -> dict:
-          """Send a query to the InfluxDB API."""
-          params = {"db": self.database_name, "q": query}
-          try:
-              response = requests.get(f"{self.url}/query", params=params, auth=self.auth)
-              response.raise_for_status()
-              return response.json()
-          except requests.exceptions.RequestException as exc:
-              raise InfluxDBError(f"An error occurred: {exc}") from exc
+  response = requests.get(
+      f"{influxdb_url}/query", params={"db": database, "q": query}, auth=auth
+  )
 
 
 The InfluxDB API response format
 --------------------------------
 
-The following example illustrates how to use the InfluxDB client to send a query to the InfluxDB API and the expected response format.
-
-.. code:: python
-
-  # Instantiate the InfluxDB client with the appropriate connection information
-  client = InfluxDBClient()
-
-  # Example query to the InfluxDB API
-  response = client.query(
-      """SELECT vacuum FROM "lsst.sal.ATCamera.vacuum" WHERE time > now() - 1h"""
-  )
-
-The above query retrieves the ``vacuum`` measurements for the ``ATCamera`` in the last hour, using the InfluxQL ``now()`` function to specify a time range relative to the server's current time.
+The above query retrieves the ``vacuum`` measurements for the ``ATCamera`` in the last hour.
 The InfluxDB API response is a JSON object with the following structure:
 
 .. code:: json
@@ -126,19 +132,19 @@ If you query a single topic like above the result will have a single ``series``.
 
 
 Converting the InfluxDB API response to a Pandas DataFrame
-----------------------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To convert the InfluxDB v1 API response to a Pandas DataFrame, you can use the following code, assuming you are sending a single query
+To convert the InfluxDB API response to a Pandas DataFrame, you can use the following code, assuming you are sending a single query
 and querying a single topic at a time like in the example above.
 
-The result is equivalent to the Pandas DataFrame you would get when using the EFD client.
+The result is equivalent to the Pandas DataFrame you would get when using the `EFD client`_.
 
 .. code:: python
 
   import pandas as pd
 
 
-  def _to_dataframe(self, response: dict) -> pd.DataFrame:
+  def to_dataframe(response: dict) -> pd.DataFrame:
       """Convert an InfluxDB response to a Pandas dataframe.
 
       Parameters
@@ -162,3 +168,33 @@ The result is equivalent to the Pandas DataFrame you would get when using the EF
       if "name" in series:
           result.name = series["name"]
       return result
+
+
+  to_dataframe(response.json())
+
+
+Best practices for querying InfluxDB databases
+----------------------------------------------
+
+When querying InfluxDB databases, keep the following best practices in mind:
+
+1. Use the Repertoire client or API to retrieve InfluxDB connection information. This ensures your application can adapt to changes in the environment.
+
+2. Whenever possible, use the InfluxDB databases at USDF even if your application is running at the Summit (for example, ``usdf_efd`` instead of ``summit_efd``). These databases are intended for user queries and help reduce the impact on Summit operations.
+
+3. Avoid querying production InfluxDB databases during development. From a development environment (such as ``usdf-rsp-dev``), use Repertoire to discover connection details for a development database (for example, ``usdfdev_efd``).
+
+4. Write efficient InfluxQL queries. Use appropriate time ranges, filters, and functions to limit the amount of data returned and reduce load on the database. You can use the ``EXPLAIN ANALYZE`` command in InfluxQL to help diagnose query performance.
+
+5. Add comments to your InfluxQL statements to help identify the origin of queries in InfluxDB logs. For example:
+
+.. code:: sql
+
+  SELECT vacuum
+  FROM "lsst.sal.ATCamera.vacuum"
+  WHERE time > now() - 1h
+  /* source: my-application-name */
+
+
+
+
