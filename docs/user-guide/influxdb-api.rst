@@ -13,10 +13,14 @@ If the client isn't available in your environment, or if you prefer a more light
 InfluxDB connection information
 -------------------------------
 
-The InfluxDB API uses simple authentication based on username and password credentials.
-Currently, there is no support for token-based authentication.
+The InfluxDB API uses simple authentication with a username and password.
+Token-based authentication is not currently supported.
 
-To query the InfluxDB API, you need the InfluxDB API URL, the database name, and the username and password credentials.
+To query an InfluxDB database using the API, you will need the following connection details:
+
+- InfluxDB API URL
+- Database name
+- Username and password
 
 If you are inside the RSP notebook aspect, you can find this information using the ``lsst.rsp`` package.
 For example, to retrieve InfluxDB connection information for the ``usdf_efd`` database:
@@ -25,16 +29,17 @@ For example, to retrieve InfluxDB connection information for the ``usdf_efd`` da
 
   from lsst.rsp import get_influxdb_credentials
 
-  info = get_influxdb_credentials("usdf_efd")
+  get_influxdb_credentials("usdf_efd")
 
-If you are outside the RSP, the recommended way to retrieve this information is using the Repertoire client, see `Getting InfluxDB connection information`_ guide.
+If you are outside the RSP, the recommended way to retrieve this information is using the Repertoire client.
+See the `Getting InfluxDB connection information`_ guide.
 
 Alternatively, you can also retrieve the InfluxDB connection information directly from the Repertoire API.
 For example, to retrieve InfluxDB connection information for the ``usdf_efd`` database, you can send a GET request to the following URL:
 
 ``https://<repertoire-url>/discovery/influxdb/usdf_efd``
 
-where ``<repertoire-url>`` is the base URL for Repertoire.
+where ``<repertoire-url>`` is the base URL for Repertoire for your local environment.
 For Phalanx applications, the base URL for Repertoire can be obtained from ``global.repertoireUrl``.
 
 Since the returned information includes username and password credentials, this endpoint is protected and requires authentication using an access token.
@@ -45,13 +50,19 @@ See the `RSP documentation`_ for more information.
 
   import requests
 
-  database = "usdf_efd"  # the InfluxDB database to retrieve information for
   repertoire_url = "..."  # the base URL for Repertoire, e.g. obtained from global.repertoireUrl in Phalanx
 
   token = "..."  # obtained from somewhere else
   headers = {"content-type": "application/json", "Authorization": f"Bearer {token}"}
 
-  info = requests.get(f"{repertoire_url}/discovery/influxdb/{database}", headers=headers)
+  response = requests.get(
+      f"{repertoire_url}/discovery/influxdb/usdf_efd", headers=headers
+  )
+
+  response.raise_for_status()  # check for HTTP errors
+
+  info = response.json()  # Parse the JSON response into a Python dictionary
+
 
 See `Repertoire API documentation`_ for more information about the returned information.
 
@@ -68,17 +79,22 @@ The following example shows how to query the InfluxDB API:
 
   import requests
 
-  influxdb_url = "https://usdf-rsp.slac.stanford.edu/influxdb-enterprise-data/"  # the URL of the InfluxDB API
-  database_name = "efd"  # the name of the database to query
+  influxdb_url = info.get("url")  # the URL of the InfluxDB API
+  database = info.get("database")  # the name of the InfluxDB database to query
   auth = (
-      "username",
-      "password",
+      info.get("username"),
+      info.get("password"),
   )  # the username and password credentials for authentication
 
-  query = """SELECT vacuum FROM "lsst.sal.ATCamera.vacuum" WHERE time > now() - 1h"""  # the InfluxQL query to send to the InfluxDB API
+  query = """
+    SELECT vacuum
+    FROM "lsst.sal.ATCamera.vacuum"
+    WHERE time > now() - 1h
+    /* source: my-application-name */
+  """  # the InfluxQL query to send to the InfluxDB API
 
   response = requests.get(
-      f"{influxdb_url}/query", params={"db": database_name, "q": query}, auth=auth
+      f"{influxdb_url}/query", params={"db": database, "q": query}, auth=auth
   )
 
 
@@ -116,7 +132,7 @@ If you query a single topic like above the result will have a single ``series``.
 
 
 Converting the InfluxDB API response to a Pandas DataFrame
-----------------------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 To convert the InfluxDB API response to a Pandas DataFrame, you can use the following code, assuming you are sending a single query
 and querying a single topic at a time like in the example above.
