@@ -2,6 +2,7 @@
 
 import click
 
+from .fields import show_fields
 from .tags import drop_tag, show_tags
 
 
@@ -11,4 +12,5 @@ def influxdb() -> None:
 
 
 influxdb.add_command(show_tags)
+influxdb.add_command(show_fields)
 influxdb.add_command(drop_tag)
