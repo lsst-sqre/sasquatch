@@ -1,5 +1,6 @@
-"""List tag keys from InfluxDB line protocol files."""
+"""Commands for working with InfluxDB line protocol tags."""
 
+import fileinput
 from collections import defaultdict
 from pathlib import Path
 
@@ -81,6 +82,35 @@ def _split_tag(tag: str) -> tuple[str, str] | None:
     return tag_key, tag_value
 
 
+def _drop_tag_from_line(line: str, tag_key_to_drop: str) -> str:
+    """Drop a tag key from a single line of InfluxDB line protocol."""
+    stripped_line = line.strip()
+    if not stripped_line or stripped_line.startswith("#"):
+        return line
+
+    field_separator = _find_unescaped_separator(line, " ")
+    if field_separator == -1:
+        return line
+
+    series_key = line[:field_separator]
+    remainder = line[field_separator:]
+    parts = _split_unescaped(series_key, ",")
+    if not parts:
+        return line
+
+    kept_parts = [parts[0]]
+    for tag in parts[1:]:
+        tag_parts = _split_tag(tag)
+        if tag_parts is None:
+            kept_parts.append(tag)
+            continue
+        tag_key, _tag_value = tag_parts
+        if tag_key != tag_key_to_drop:
+            kept_parts.append(tag)
+
+    return ",".join(kept_parts) + remainder
+
+
 def extract_measurement_tag_keys(
     file_path: str | Path,
 ) -> dict[str, list[str]]:
@@ -115,11 +145,33 @@ def extract_measurement_tag_keys(
     return {m: sorted(tags) for m, tags in measurement_tags.items()}
 
 
+def drop_measurement_tag_key(
+    file_path: str | Path,
+    tag_key_to_drop: str,
+) -> int:
+    """Remove a tag key from an InfluxDB line protocol file in place."""
+    modified_line_count = 0
+    with fileinput.input(
+        files=(str(file_path),),
+        inplace=True,
+        encoding="utf-8",
+    ) as lines:
+        for line in lines:
+            updated_line = _drop_tag_from_line(line, tag_key_to_drop)
+            if updated_line != line:
+                modified_line_count += 1
+            click.echo(
+                updated_line,
+                nl=False,
+            )
+    return modified_line_count
+
+
 @click.command("show-tags")
 @click.argument(
     "filename", type=click.Path(exists=True, dir_okay=False, path_type=str)
 )
-def list_tags(filename: str) -> None:
+def show_tags(filename: str) -> None:
     """List measurements and unique tag keys from a line protocol file."""
     result = extract_measurement_tag_keys(filename)
 
@@ -134,3 +186,21 @@ def list_tags(filename: str) -> None:
             else "(no tags)"
         )
         click.echo(f"{measurement}: {tags}")
+
+
+@click.command("drop-tag")
+@click.argument(
+    "filename", type=click.Path(exists=True, dir_okay=False, path_type=str)
+)
+@click.argument("tag_key", nargs=1)
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="Show how many lines were modified.",
+)
+def drop_tag(filename: str, tag_key: str, *, verbose: bool) -> None:
+    """Drop a tag key from a line protocol file."""
+    modified_line_count = drop_measurement_tag_key(filename, tag_key)
+    if verbose:
+        click.echo(f"Modified {modified_line_count} lines.")

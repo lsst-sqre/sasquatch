@@ -2,7 +2,7 @@
 
 import click
 
-from .tags import list_tags
+from .tags import drop_tag, show_tags
 
 
 @click.group()
@@ -10,4 +10,5 @@ def influxdb() -> None:
     """InfluxDB tools."""
 
 
-influxdb.add_command(list_tags)
+influxdb.add_command(show_tags)
+influxdb.add_command(drop_tag)
