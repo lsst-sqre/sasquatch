@@ -74,7 +74,12 @@ def _split_field(field: str) -> tuple[str, str] | None:
     return field_key, field_value
 
 
-def _drop_field_from_line(line: str, field_key_to_drop: str) -> str:
+def _drop_field_from_line(
+    line: str,
+    field_key_to_drop: str,
+    *,
+    measurement: str | None = None,
+) -> str:
     """Drop a field key from a single line of InfluxDB line protocol."""
     line_ending = "\n" if line.endswith("\n") else ""
     content = line.removesuffix(line_ending)
@@ -95,6 +100,13 @@ def _drop_field_from_line(line: str, field_key_to_drop: str) -> str:
         else field_and_timestamp[:field_end]
     )
     remainder = "" if field_end == -1 else field_and_timestamp[field_end:]
+    measurement_parts = _split_unescaped(series_key, ",")
+    if not measurement_parts:
+        return line
+
+    line_measurement = _unescape(measurement_parts[0])
+    if measurement is not None and line_measurement != measurement:
+        return line
 
     kept_fields: list[str] = []
     for field in _split_fields(field_set):
@@ -116,7 +128,7 @@ def extract_measurement_field_keys(
     file_path: str | Path,
 ) -> dict[str, list[str]]:
     """Read an InfluxDB line protocol file and return field keys."""
-    measurement_fields = defaultdict(set)
+    measurement_fields: defaultdict[str, set[str]] = defaultdict(set)
     path = Path(file_path)
 
     with path.open("r", encoding="utf-8") as file_handle:
@@ -160,6 +172,8 @@ def extract_measurement_field_keys(
 def drop_measurement_field_key(
     file_path: str | Path,
     field_key_to_drop: str,
+    *,
+    measurement: str | None = None,
 ) -> int:
     """Remove a field key from an InfluxDB line protocol file in place."""
     modified_line_count = 0
@@ -169,7 +183,11 @@ def drop_measurement_field_key(
         encoding="utf-8",
     ) as lines:
         for line in lines:
-            updated_line = _drop_field_from_line(line, field_key_to_drop)
+            updated_line = _drop_field_from_line(
+                line,
+                field_key_to_drop,
+                measurement=measurement,
+            )
             if updated_line != line:
                 modified_line_count += 1
             click.echo(updated_line, nl=False)
@@ -208,8 +226,25 @@ def show_fields(filename: str) -> None:
     is_flag=True,
     help="Show how many lines were modified.",
 )
-def drop_field(filename: str, field_key: str, *, verbose: bool) -> None:
+@click.option(
+    "-m",
+    "--measurement",
+    type=str,
+    default=None,
+    help="Only drop the field from this measurement.",
+)
+def drop_field(
+    filename: str,
+    field_key: str,
+    *,
+    verbose: bool,
+    measurement: str | None,
+) -> None:
     """Drop a field key from a line protocol file."""
-    modified_line_count = drop_measurement_field_key(filename, field_key)
+    modified_line_count = drop_measurement_field_key(
+        filename,
+        field_key,
+        measurement=measurement,
+    )
     if verbose:
         click.echo(f"Modified {modified_line_count} lines.")

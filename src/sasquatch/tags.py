@@ -124,7 +124,7 @@ def extract_measurement_tag_keys(
     file_path: str | Path,
 ) -> dict[str, list[str]]:
     """Read an InfluxDB line protocol file and return a dictionary."""
-    measurement_tags = defaultdict(set)
+    measurement_tags: defaultdict[str, set[str]] = defaultdict(set)
     path = Path(file_path)
 
     with path.open("r", encoding="utf-8") as f:

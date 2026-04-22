@@ -119,3 +119,68 @@ def test_drop_field_verbose_reports_modified_line_count(
     assert data_file.read_text(encoding="utf-8") == (
         "weather temp=82,humidity=41i\nweather status=1i\ncpu value=1i\n"
     )
+
+
+def test_drop_field_can_be_scoped_to_one_measurement(tmp_path: Path) -> None:
+    """Measurement scoping should preserve matching fields elsewhere."""
+    data_file = tmp_path / "data.lp"
+    data_file.write_text(
+        "weather temp=82,humidity=41i\n"
+        "cpu temp=55i,value=1i\n"
+        'weather summary="hot, dry day",status=1i\n',
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "drop-field",
+            "--measurement",
+            "weather",
+            str(data_file),
+            "temp",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == ""
+    assert data_file.read_text(encoding="utf-8") == (
+        "weather humidity=41i\n"
+        "cpu temp=55i,value=1i\n"
+        'weather summary="hot, dry day",status=1i\n'
+    )
+
+
+def test_drop_field_verbose_reports_scoped_line_count(
+    tmp_path: Path,
+) -> None:
+    """Count only modified lines in the target measurement."""
+    data_file = tmp_path / "data.lp"
+    data_file.write_text(
+        "weather temp=82,humidity=41i\n"
+        "cpu temp=55i,value=1i\n"
+        "weather temp=83,status=1i\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "drop-field",
+            "-v",
+            "-m",
+            "weather",
+            str(data_file),
+            "temp",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Modified 2 lines.\n"
+    assert data_file.read_text(encoding="utf-8") == (
+        "weather humidity=41i\ncpu temp=55i,value=1i\nweather status=1i\n"
+    )
