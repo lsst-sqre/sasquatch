@@ -150,3 +150,72 @@ def test_drop_measurement_tag_key_verbose_reports_modified_line_count(
     assert data_file.read_text(encoding="utf-8") == (
         "weather temp=82\nweather,zone=north humidity=41\ncpu value=1i\n"
     )
+
+
+def test_drop_measurement_tag_key_can_be_scoped_to_one_measurement(
+    tmp_path: Path,
+) -> None:
+    """Measurement scoping should preserve matching tags elsewhere."""
+    data_file = tmp_path / "data.lp"
+    data_file.write_text(
+        "weather,region=us,zone=north temp=82\n"
+        "cpu,region=us host=worker-1 value=1i\n"
+        "weather,region=eu humidity=41\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "drop-tag",
+            "--measurement",
+            "weather",
+            str(data_file),
+            "region",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == ""
+    assert data_file.read_text(encoding="utf-8") == (
+        "weather,zone=north temp=82\n"
+        "cpu,region=us host=worker-1 value=1i\n"
+        "weather humidity=41\n"
+    )
+
+
+def test_drop_measurement_tag_key_verbose_reports_scoped_line_count(
+    tmp_path: Path,
+) -> None:
+    """Count only modified lines in the target measurement."""
+    data_file = tmp_path / "data.lp"
+    data_file.write_text(
+        "weather,region=us temp=82\n"
+        "cpu,region=us value=1i\n"
+        "weather,region=eu,zone=north humidity=41\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "drop-tag",
+            "-v",
+            "-m",
+            "weather",
+            str(data_file),
+            "region",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Modified 2 lines.\n"
+    assert data_file.read_text(encoding="utf-8") == (
+        "weather temp=82\n"
+        "cpu,region=us value=1i\n"
+        "weather,zone=north humidity=41\n"
+    )

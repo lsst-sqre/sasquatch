@@ -82,7 +82,12 @@ def _split_tag(tag: str) -> tuple[str, str] | None:
     return tag_key, tag_value
 
 
-def _drop_tag_from_line(line: str, tag_key_to_drop: str) -> str:
+def _drop_tag_from_line(
+    line: str,
+    tag_key_to_drop: str,
+    *,
+    measurement: str | None = None,
+) -> str:
     """Drop a tag key from a single line of InfluxDB line protocol."""
     stripped_line = line.strip()
     if not stripped_line or stripped_line.startswith("#"):
@@ -96,6 +101,10 @@ def _drop_tag_from_line(line: str, tag_key_to_drop: str) -> str:
     remainder = line[field_separator:]
     parts = _split_unescaped(series_key, ",")
     if not parts:
+        return line
+
+    line_measurement = _unescape(parts[0])
+    if measurement is not None and line_measurement != measurement:
         return line
 
     kept_parts = [parts[0]]
@@ -148,6 +157,8 @@ def extract_measurement_tag_keys(
 def drop_measurement_tag_key(
     file_path: str | Path,
     tag_key_to_drop: str,
+    *,
+    measurement: str | None = None,
 ) -> int:
     """Remove a tag key from an InfluxDB line protocol file in place."""
     modified_line_count = 0
@@ -157,7 +168,11 @@ def drop_measurement_tag_key(
         encoding="utf-8",
     ) as lines:
         for line in lines:
-            updated_line = _drop_tag_from_line(line, tag_key_to_drop)
+            updated_line = _drop_tag_from_line(
+                line,
+                tag_key_to_drop,
+                measurement=measurement,
+            )
             if updated_line != line:
                 modified_line_count += 1
             click.echo(
@@ -199,8 +214,25 @@ def show_tags(filename: str) -> None:
     is_flag=True,
     help="Show how many lines were modified.",
 )
-def drop_tag(filename: str, tag_key: str, *, verbose: bool) -> None:
+@click.option(
+    "-m",
+    "--measurement",
+    type=str,
+    default=None,
+    help="Only drop the tag from this measurement.",
+)
+def drop_tag(
+    filename: str,
+    tag_key: str,
+    *,
+    verbose: bool,
+    measurement: str | None,
+) -> None:
     """Drop a tag key from a line protocol file."""
-    modified_line_count = drop_measurement_tag_key(filename, tag_key)
+    modified_line_count = drop_measurement_tag_key(
+        filename,
+        tag_key,
+        measurement=measurement,
+    )
     if verbose:
         click.echo(f"Modified {modified_line_count} lines.")
