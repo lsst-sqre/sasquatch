@@ -45,3 +45,77 @@ def test_show_fields_handles_quoted_string_values_with_commas_and_spaces(
 
     assert result.exit_code == 0
     assert result.output == "weather: note, summary, temp\n"
+
+
+def test_drop_field_rewrites_line_protocol_file(tmp_path: Path) -> None:
+    """The CLI should remove matching fields and keep the rest unchanged."""
+    data_file = tmp_path / "data.lp"
+    data_file.write_text(
+        "# comment\n"
+        'weather,region=us temp=82,summary="hot, dry day"\n'
+        "weather,region=us humidity=41i,status=1i\n"
+        "cpu value=1i\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["influxdb", "drop-field", str(data_file), "summary"],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == ""
+    assert data_file.read_text(encoding="utf-8") == (
+        "# comment\n"
+        "weather,region=us temp=82\n"
+        "weather,region=us humidity=41i,status=1i\n"
+        "cpu value=1i\n"
+    )
+
+
+def test_drop_field_drops_lines_with_no_remaining_fields(
+    tmp_path: Path,
+) -> None:
+    """Dropping the only field should remove the whole record line."""
+    data_file = tmp_path / "data.lp"
+    data_file.write_text(
+        "weather,region=us temp=82\nweather,region=us humidity=41i,temp=83\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["influxdb", "drop-field", str(data_file), "temp"],
+    )
+
+    assert result.exit_code == 0
+    assert data_file.read_text(encoding="utf-8") == (
+        "weather,region=us humidity=41i\n"
+    )
+
+
+def test_drop_field_verbose_reports_modified_line_count(
+    tmp_path: Path,
+) -> None:
+    """Verbose mode should report how many lines changed."""
+    data_file = tmp_path / "data.lp"
+    data_file.write_text(
+        "weather temp=82,humidity=41i\n"
+        'weather summary="hot, dry day",status=1i\n'
+        "cpu value=1i\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["influxdb", "drop-field", "-v", str(data_file), "summary"],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Modified 1 lines.\n"
+    assert data_file.read_text(encoding="utf-8") == (
+        "weather temp=82,humidity=41i\nweather status=1i\ncpu value=1i\n"
+    )
