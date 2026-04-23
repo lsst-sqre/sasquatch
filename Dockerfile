@@ -1,3 +1,9 @@
+# This Dockerfile builds the main Sasquatch application image.
+#
+# The backup and restore utility image is intentionally separate and lives at
+# backup/Dockerfile because it needs InfluxDB-specific operational tooling that
+# does not belong in the web application's runtime image.
+#
 # This Dockerfile has three stages:
 #
 # base-image
@@ -68,4 +74,4 @@ EXPOSE 8080
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Run the application.
-CMD ["uvicorn", "example.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "sasquatch.main:app", "--host", "0.0.0.0", "--port", "8080"]
