@@ -219,3 +219,91 @@ def test_drop_measurement_tag_key_verbose_reports_scoped_line_count(
         "cpu,region=us value=1i\n"
         "weather,zone=north humidity=41\n"
     )
+
+
+def test_rename_tag_rewrites_line_protocol_file(tmp_path: Path) -> None:
+    """The CLI should rename matching tags and keep the rest unchanged."""
+    data_file = tmp_path / "data.lp"
+    data_file.write_text(
+        "# comment\n"
+        "weather,region=us,zone=north temp=82\n"
+        "cpu,region=us value=1i\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["influxdb", "rename-tag", str(data_file), "region", "site"],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == ""
+    assert data_file.read_text(encoding="utf-8") == (
+        "# comment\nweather,site=us,zone=north temp=82\ncpu,site=us value=1i\n"
+    )
+
+
+def test_rename_tag_can_be_scoped_to_one_measurement(tmp_path: Path) -> None:
+    """Measurement scoping should preserve matching tags elsewhere."""
+    data_file = tmp_path / "data.lp"
+    data_file.write_text(
+        "weather,region=us,zone=north temp=82\n"
+        "cpu,region=us value=1i\n"
+        "weather,region=eu humidity=41\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "rename-tag",
+            "--measurement",
+            "weather",
+            str(data_file),
+            "region",
+            "site",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == ""
+    assert data_file.read_text(encoding="utf-8") == (
+        "weather,site=us,zone=north temp=82\n"
+        "cpu,region=us value=1i\n"
+        "weather,site=eu humidity=41\n"
+    )
+
+
+def test_rename_tag_escapes_new_tag_key_and_reports_verbose_count(
+    tmp_path: Path,
+) -> None:
+    """Verbose mode should report changes and escaped new keys stay valid."""
+    data_file = tmp_path / "data.lp"
+    data_file.write_text(
+        "weather,region=us temp=82\ncpu,region=us value=1i\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "rename-tag",
+            "-v",
+            "-m",
+            "weather",
+            str(data_file),
+            "region",
+            "site area",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Modified 1 lines.\n"
+    assert data_file.read_text(encoding="utf-8") == (
+        "weather,site\\ area=us temp=82\ncpu,region=us value=1i\n"
+    )

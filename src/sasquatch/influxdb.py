@@ -3,7 +3,7 @@
 import click
 
 from .fields import drop_field, show_fields
-from .tags import drop_tag, show_tags
+from .tags import drop_tag, rename_tag, show_tags
 
 
 @click.group()
@@ -15,3 +15,4 @@ influxdb.add_command(show_tags)
 influxdb.add_command(show_fields)
 influxdb.add_command(drop_tag)
 influxdb.add_command(drop_field)
+influxdb.add_command(rename_tag)
