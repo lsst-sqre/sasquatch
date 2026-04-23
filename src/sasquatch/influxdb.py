@@ -2,7 +2,7 @@
 
 import click
 
-from .fields import drop_field, show_fields
+from .fields import drop_field, rename_field, show_fields
 from .tags import drop_tag, rename_tag, show_tags
 
 
@@ -16,3 +16,4 @@ influxdb.add_command(show_fields)
 influxdb.add_command(drop_tag)
 influxdb.add_command(drop_field)
 influxdb.add_command(rename_tag)
+influxdb.add_command(rename_field)

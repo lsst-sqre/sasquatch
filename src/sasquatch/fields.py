@@ -6,7 +6,12 @@ from pathlib import Path
 
 import click
 
-from .tags import _find_unescaped_separator, _split_unescaped, _unescape
+from .tags import (
+    _escape_tag_key,
+    _find_unescaped_separator,
+    _split_unescaped,
+    _unescape,
+)
 
 
 def _find_unquoted_separator(text: str, separator: str) -> int:
@@ -124,6 +129,60 @@ def _drop_field_from_line(
     return f"{series_key} {','.join(kept_fields)}{remainder}{line_ending}"
 
 
+def _rename_field_in_line(
+    line: str,
+    field_key_to_rename: str,
+    new_field_key: str,
+    *,
+    measurement: str | None = None,
+) -> str:
+    """Rename a field key in a single line of InfluxDB line protocol."""
+    line_ending = "\n" if line.endswith("\n") else ""
+    content = line.removesuffix(line_ending)
+    stripped_line = content.strip()
+    if not stripped_line or stripped_line.startswith("#"):
+        return line
+
+    series_separator = _find_unescaped_separator(content, " ")
+    if series_separator == -1:
+        return line
+
+    series_key = content[:series_separator]
+    field_and_timestamp = content[series_separator + 1 :]
+    field_end = _find_unquoted_separator(field_and_timestamp, " ")
+    field_set = (
+        field_and_timestamp
+        if field_end == -1
+        else field_and_timestamp[:field_end]
+    )
+    remainder = "" if field_end == -1 else field_and_timestamp[field_end:]
+    measurement_parts = _split_unescaped(series_key, ",")
+    if not measurement_parts:
+        return line
+
+    line_measurement = _unescape(measurement_parts[0])
+    if measurement is not None and line_measurement != measurement:
+        return line
+
+    renamed_fields: list[str] = []
+    escaped_new_field_key = _escape_tag_key(new_field_key)
+    for field in _split_fields(field_set):
+        separator_index = _find_unescaped_separator(field, "=")
+        if separator_index == -1:
+            renamed_fields.append(field)
+            continue
+
+        field_key = _unescape(field[:separator_index])
+        if field_key == field_key_to_rename:
+            renamed_fields.append(
+                f"{escaped_new_field_key}={field[separator_index + 1 :]}"
+            )
+        else:
+            renamed_fields.append(field)
+
+    return f"{series_key} {','.join(renamed_fields)}{remainder}{line_ending}"
+
+
 def extract_measurement_field_keys(
     file_path: str | Path,
 ) -> dict[str, list[str]]:
@@ -194,6 +253,33 @@ def drop_measurement_field_key(
     return modified_line_count
 
 
+def rename_measurement_field_key(
+    file_path: str | Path,
+    field_key_to_rename: str,
+    new_field_key: str,
+    *,
+    measurement: str | None = None,
+) -> int:
+    """Rename a field key in an InfluxDB line protocol file in place."""
+    modified_line_count = 0
+    with fileinput.input(
+        files=(str(file_path),),
+        inplace=True,
+        encoding="utf-8",
+    ) as lines:
+        for line in lines:
+            updated_line = _rename_field_in_line(
+                line,
+                field_key_to_rename,
+                new_field_key,
+                measurement=measurement,
+            )
+            if updated_line != line:
+                modified_line_count += 1
+            click.echo(updated_line, nl=False)
+    return modified_line_count
+
+
 @click.command("show-fields")
 @click.argument(
     "filename", type=click.Path(exists=True, dir_okay=False, path_type=str)
@@ -244,6 +330,44 @@ def drop_field(
     modified_line_count = drop_measurement_field_key(
         filename,
         field_key,
+        measurement=measurement,
+    )
+    if verbose:
+        click.echo(f"Modified {modified_line_count} lines.")
+
+
+@click.command("rename-field")
+@click.argument(
+    "filename", type=click.Path(exists=True, dir_okay=False, path_type=str)
+)
+@click.argument("field_key", nargs=1)
+@click.argument("new_field_key", nargs=1)
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="Show how many lines were modified.",
+)
+@click.option(
+    "-m",
+    "--measurement",
+    type=str,
+    default=None,
+    help="Only rename the field on this measurement.",
+)
+def rename_field(
+    filename: str,
+    field_key: str,
+    new_field_key: str,
+    *,
+    verbose: bool,
+    measurement: str | None,
+) -> None:
+    """Rename a field key in a line protocol file."""
+    modified_line_count = rename_measurement_field_key(
+        filename,
+        field_key,
+        new_field_key,
         measurement=measurement,
     )
     if verbose:

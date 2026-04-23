@@ -184,3 +184,93 @@ def test_drop_field_verbose_reports_scoped_line_count(
     assert data_file.read_text(encoding="utf-8") == (
         "weather humidity=41i\ncpu temp=55i,value=1i\nweather status=1i\n"
     )
+
+
+def test_rename_field_rewrites_line_protocol_file(tmp_path: Path) -> None:
+    """The CLI should rename matching fields and keep the rest unchanged."""
+    data_file = tmp_path / "data.lp"
+    data_file.write_text(
+        "# comment\n"
+        'weather temp=82,summary="hot, dry day"\n'
+        "cpu temp=55i,value=1i\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["influxdb", "rename-field", str(data_file), "temp", "temperature"],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == ""
+    assert data_file.read_text(encoding="utf-8") == (
+        "# comment\n"
+        'weather temperature=82,summary="hot, dry day"\n'
+        "cpu temperature=55i,value=1i\n"
+    )
+
+
+def test_rename_field_can_be_scoped_to_one_measurement(tmp_path: Path) -> None:
+    """Measurement scoping should preserve matching fields elsewhere."""
+    data_file = tmp_path / "data.lp"
+    data_file.write_text(
+        "weather temp=82,humidity=41i\n"
+        "cpu temp=55i,value=1i\n"
+        "weather temp=83,status=1i\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "rename-field",
+            "--measurement",
+            "weather",
+            str(data_file),
+            "temp",
+            "temperature",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == ""
+    assert data_file.read_text(encoding="utf-8") == (
+        "weather temperature=82,humidity=41i\n"
+        "cpu temp=55i,value=1i\n"
+        "weather temperature=83,status=1i\n"
+    )
+
+
+def test_rename_field_escapes_new_key_and_reports_verbose_count(
+    tmp_path: Path,
+) -> None:
+    """Verbose mode should report changes and escaped new keys stay valid."""
+    data_file = tmp_path / "data.lp"
+    data_file.write_text(
+        "weather temp=82,humidity=41i\ncpu temp=55i,value=1i\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "rename-field",
+            "-v",
+            "-m",
+            "weather",
+            str(data_file),
+            "temp",
+            "temperature zone",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Modified 1 lines.\n"
+    assert data_file.read_text(encoding="utf-8") == (
+        "weather temperature\\ zone=82,humidity=41i\ncpu temp=55i,value=1i\n"
+    )
