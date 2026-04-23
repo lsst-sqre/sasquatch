@@ -58,6 +58,42 @@ jobs:
           && (startsWith(github.head_ref, 'tickets/')
               || startsWith(github.head_ref, 't/')))
 
+  build-backup:
+    needs: [test]
+    runs-on: ubuntu-latest
+
+    # Only do Docker builds of releases and pull requests from ticket
+    # branches. This will still trigger on pull requests from untrusted
+    # repositories whose branch names match our tickets/* branch convention,
+    # but in this case the build will fail with an error since the secret
+    # won't be set.
+    if: >
+      (github.event_name == 'release' && github.event.action == 'published')
+      || (github.event_name != 'merge_group'
+          && (startsWith(github.head_ref, 'tickets/')
+              || startsWith(github.head_ref, 't/')))
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: lsst-sqre/build-and-push-to-ghcr@v1
+        id: build
+        with:
+          image: ${{ github.repository }}-backup
+          dockerfile: backup/Dockerfile
+          context: .
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          platforms: linux/amd64
+
+      - run: echo Pushed ghcr.io/${{ github.repository }}-backup:${{ steps.build.outputs.tag }}
+
+
   docs:
     runs-on: ubuntu-latest
     timeout-minutes: 10

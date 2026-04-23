@@ -1,6 +1,6 @@
 # Start from the InfluxDB Enterprise Meta image
 # This provides the InfluxDB Enterprise influxd-ctl command
-FROM influxdb:1.11.8-meta
+FROM influxdb:1.12.3-meta
 
 # Install pipx and use it to install gsutil which is required for the backup script
 # to upload the backup files to Google Cloud Storage
@@ -21,12 +21,16 @@ RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/s
     chmod +x kubectl && \
     mv kubectl /usr/local/bin/
 
-# Install influxd from InfluxDB OSS 1.11.8
-RUN mkdir influxdb-1.11.8 && \
-    curl -LO "https://download.influxdata.com/influxdb/releases/influxdb-1.11.8-linux-amd64.tar.gz" && \
-    tar xf influxdb-1.11.8-linux-amd64.tar.gz -C influxdb-1.11.8 && \
-    mv influxdb-1.11.8/influxd /usr/local/bin/ && \
-    rm -rf influxdb-1.11.8-linux-amd64.tar.gz
+# Install influxd from InfluxDB OSS 1.12.3.
+# InfluxData publishes this release under a versioned download path and the
+# tarball layout may include intermediate directories, so locate the binary
+# after extraction rather than assuming its exact path inside the archive.
+RUN mkdir influxdb-1.12.3 && \
+    curl -LO "https://dl.influxdata.com/influxdb/releases/v1.12.3/influxdb-1.12.3_linux_amd64.tar.gz" && \
+    tar xf influxdb-1.12.3_linux_amd64.tar.gz -C influxdb-1.12.3 && \
+    mv "$(find influxdb-1.12.3 -type f -name influxd | head -n 1)" /usr/local/bin/ && \
+    mv "$(find influxdb-1.12.3 -type f -name influx_inspect | head -n 1)" /usr/local/bin/ && \
+    rm -rf influxdb-1.12.3 influxdb-1.12.3_linux_amd64.tar.gz
 
 # Verify influxd installation
 RUN influxd version
