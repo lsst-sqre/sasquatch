@@ -7,7 +7,12 @@ from pathlib import Path
 import click
 
 from .fields import _find_unquoted_separator, _split_field, _split_fields
-from .tags import _find_unescaped_separator, _split_unescaped, _unescape
+from .tags import (
+    _escape_tag_key,
+    _find_unescaped_separator,
+    _split_unescaped,
+    _unescape,
+)
 
 
 def _drop_measurement_from_line(line: str, measurement_to_drop: str) -> str:
@@ -32,6 +37,37 @@ def _drop_measurement_from_line(line: str, measurement_to_drop: str) -> str:
         return ""
 
     return line
+
+
+def _rename_measurement_in_line(
+    line: str,
+    measurement_to_rename: str,
+    new_measurement_name: str,
+) -> str:
+    """Rename a measurement in a single line of InfluxDB line protocol."""
+    line_ending = "\n" if line.endswith("\n") else ""
+    content = line.removesuffix(line_ending)
+    stripped_line = content.strip()
+    if not stripped_line or stripped_line.startswith("#"):
+        return line
+
+    field_separator = _find_unescaped_separator(content, " ")
+    if field_separator == -1:
+        return line
+
+    series_key = content[:field_separator]
+    remainder = content[field_separator:]
+    parts = _split_unescaped(series_key, ",")
+    if not parts:
+        return line
+
+    line_measurement = _unescape(parts[0])
+    if line_measurement != measurement_to_rename:
+        return line
+
+    escaped_measurement = _escape_tag_key(new_measurement_name)
+    renamed_parts = [escaped_measurement, *parts[1:]]
+    return f"{','.join(renamed_parts)}{remainder}{line_ending}"
 
 
 def extract_measurement_keys(
@@ -108,6 +144,30 @@ def drop_measurement(file_path: str | Path, measurement_name: str) -> int:
     return modified_line_count
 
 
+def rename_measurement(
+    file_path: str | Path,
+    measurement_name: str,
+    new_measurement_name: str,
+) -> int:
+    """Rename a measurement in an InfluxDB line protocol file in place."""
+    modified_line_count = 0
+    with fileinput.input(
+        files=(str(file_path),),
+        inplace=True,
+        encoding="utf-8",
+    ) as lines:
+        for line in lines:
+            updated_line = _rename_measurement_in_line(
+                line,
+                measurement_name,
+                new_measurement_name,
+            )
+            if updated_line != line:
+                modified_line_count += 1
+            click.echo(updated_line, nl=False)
+    return modified_line_count
+
+
 @click.command("show-measurements")
 @click.argument(
     "filename", type=click.Path(exists=True, dir_okay=False, path_type=str)
@@ -145,5 +205,34 @@ def drop_measurement_command(
 ) -> None:
     """Drop a measurement from a line protocol file."""
     modified_line_count = drop_measurement(filename, measurement_name)
+    if verbose:
+        click.echo(f"Modified {modified_line_count} lines.")
+
+
+@click.command("rename-measurement")
+@click.argument(
+    "filename", type=click.Path(exists=True, dir_okay=False, path_type=str)
+)
+@click.argument("measurement_name", nargs=1)
+@click.argument("new_measurement_name", nargs=1)
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="Show how many lines were modified.",
+)
+def rename_measurement_command(
+    filename: str,
+    measurement_name: str,
+    new_measurement_name: str,
+    *,
+    verbose: bool,
+) -> None:
+    """Rename a measurement in a line protocol file."""
+    modified_line_count = rename_measurement(
+        filename,
+        measurement_name,
+        new_measurement_name,
+    )
     if verbose:
         click.echo(f"Modified {modified_line_count} lines.")
