@@ -90,6 +90,81 @@ def _split_tag(tag: str) -> tuple[str, str] | None:
     return tag_key, tag_value
 
 
+def _unescape_if_needed(value: str) -> str:
+    """Unescape a value only when it contains escapes."""
+    return _unescape(value) if "\\" in value else value
+
+
+def _extract_measurement_and_tag_keys(  # noqa: C901, PLR0912, PLR0915
+    line: str,
+) -> tuple[str, set[str]] | None:
+    """Extract a measurement name and tag keys with one pass over the line."""
+    stripped_line = line.lstrip()
+    if not stripped_line or stripped_line.startswith("#"):
+        return None
+
+    measurement_chars: list[str] = []
+    tag_keys: set[str] = set()
+    tag_key_chars: list[str] = []
+    escaped = False
+    in_tag_key = False
+    in_tag_value = False
+
+    for char in line:
+        if escaped:
+            if in_tag_key:
+                tag_key_chars.append(char)
+            elif not in_tag_value:
+                measurement_chars.append(char)
+            escaped = False
+            continue
+
+        if char == "\\":
+            escaped = True
+            if in_tag_key:
+                tag_key_chars.append(char)
+            elif not in_tag_value:
+                measurement_chars.append(char)
+            continue
+
+        if in_tag_value:
+            if char == ",":
+                in_tag_value = False
+                in_tag_key = True
+                tag_key_chars = []
+                continue
+            if char == " ":
+                break
+            continue
+
+        if in_tag_key:
+            if char == "=":
+                tag_keys.add(_unescape_if_needed("".join(tag_key_chars)))
+                in_tag_key = False
+                in_tag_value = True
+                continue
+            if char == ",":
+                tag_key_chars = []
+                continue
+            if char == " ":
+                break
+            tag_key_chars.append(char)
+            continue
+
+        if char == ",":
+            in_tag_key = True
+            continue
+        if char == " ":
+            break
+        measurement_chars.append(char)
+
+    if not measurement_chars:
+        return None
+
+    measurement = _unescape_if_needed("".join(measurement_chars))
+    return measurement, tag_keys
+
+
 def _rename_tag_in_line(
     line: str,
     tag_key_to_rename: str,
@@ -182,26 +257,12 @@ def extract_measurement_tag_keys(
 
     with path.open("r", encoding="utf-8") as f:
         for raw_line in f:
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
+            parsed_line = _extract_measurement_and_tag_keys(raw_line)
+            if parsed_line is None:
                 continue
 
-            field_separator = _find_unescaped_separator(line, " ")
-            if field_separator == -1:
-                continue
-
-            parts = _split_unescaped(line[:field_separator], ",")
-            if not parts:
-                continue
-
-            measurement = _unescape(parts[0])
-            measurement_tags[measurement]
-
-            for tag in parts[1:]:
-                tag_parts = _split_tag(tag)
-                if tag_parts is not None:
-                    tag_key, _tag_value = tag_parts
-                    measurement_tags[measurement].add(tag_key)
+            measurement, tag_keys = parsed_line
+            measurement_tags[measurement].update(tag_keys)
 
     # Convert sets to sorted lists
     return {m: sorted(tags) for m, tags in measurement_tags.items()}
