@@ -9,6 +9,16 @@ Backup data is stored using a persistent volume and managed via retention polici
 
 This guide describes how to enable and configure scheduled backups in Sasquatch using the backup subchart.
 
+Container images
+================
+
+Sasquatch uses two different container images:
+
+- The main application image, built from the repository-root ``Dockerfile``, runs the FastAPI service.
+- The backup utility image, built from ``backup/Dockerfile``, runs scheduled backups and restore workflows. It includes tools such as ``kubectl``, ``jq``, ``influxd``, and ``influxd-ctl`` that are intentionally not included in the main application image.
+
+When configuring backup CronJobs or restore Jobs, use the backup utility image rather than the main application image.
+
 Enabling Backup Items
 =====================
 
@@ -200,7 +210,7 @@ For long-running restores, define a Kubernetes Job:
              claimName: sasquatch-backup
          containers:
          - name: sasquatch-backup
-           image: ghcr.io/lsst-sqre/sasquatch:1.3.0
+           image: ghcr.io/lsst-sqre/sasquatch-backup:1.3.0
            imagePullPolicy: IfNotPresent
            volumeMounts:
            - name: backup

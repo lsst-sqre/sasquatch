@@ -1,32 +1,153 @@
 name: CI
 
+env:
+  # Current supported uv version. The uv documentation recommends pinning
+  # this. The version should match the version used in .pre-commit-config.yaml
+  # and frozen in uv.lock. It is updated by make update-deps.
+  UV_VERSION: "0.11.7"
+
 "on":
   merge_group: {}
   pull_request: {}
   push:
-    tags:
-      - "*"
+    branches-ignore:
+      # These should always correspond to pull requests, so ignore them for
+      # the push trigger and let them be triggered by the pull_request
+      # trigger, avoiding running the workflow twice. This is a minor
+      # optimization so there's no need to ensure this is comprehensive.
+      - "dependabot/**"
+      - "gh-readonly-queue/**"
+      - "renovate/**"
+      - "t/**"
+      - "tickets/**"
+      - "u/**"
+  release:
+    types: [published]
 
 jobs:
-
-  build:
+  test:
     runs-on: ubuntu-latest
-
-    # Only do Docker builds of tagged releases and pull requests from ticket
-    # branches.
-    if: >
-      startsWith(github.ref, 'refs/tags/')
-      || startsWith(github.head_ref, 'tickets/')
+    timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Run tox
+        run: uv run --only-group=tox tox run -e lint,typing,py,coverage-report
+
+  build:
+    needs: [test]
+    secrets: inherit
+    uses: lsst-sqre/multiplatform-build-and-push/.github/workflows/build.yaml@v3
+    with:
+      images: ghcr.io/${{ github.repository }}
+
+    # Only do Docker builds of releases and pull requests from ticket
+    # branches. This will still trigger on pull requests from untrusted
+    # repositories whose branch names match our tickets/* branch convention,
+    # but in this case the build will fail with an error since the secret
+    # won't be set.
+    if: >
+      (github.event_name == 'release' && github.event.action == 'published')
+      || (github.event_name != 'merge_group'
+          && (startsWith(github.head_ref, 'tickets/')
+              || startsWith(github.head_ref, 't/')))
+
+  build-backup:
+    needs: [test]
+    runs-on: ubuntu-latest
+
+    # Only do Docker builds of releases and pull requests from ticket
+    # branches. This will still trigger on pull requests from untrusted
+    # repositories whose branch names match our tickets/* branch convention,
+    # but in this case the build will fail with an error since the secret
+    # won't be set.
+    if: >
+      (github.event_name == 'release' && github.event.action == 'published')
+      || (github.event_name != 'merge_group'
+          && (startsWith(github.head_ref, 'tickets/')
+              || startsWith(github.head_ref, 't/')))
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - uses: lsst-sqre/build-and-push-to-ghcr@v1
         id: build
         with:
-          image: ${{ github.repository }}
+          image: ${{ github.repository }}-backup
+          dockerfile: backup/Dockerfile
+          context: .
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          platforms: linux/amd64
 
-      - run: echo Pushed ghcr.io/${{ github.repository }}:${{ steps.build.outputs.tag }}
+      - run: echo Pushed ghcr.io/${{ github.repository }}-backup:${{ steps.build.outputs.tag }}
+
+
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Ensure the documentation gets the right version.
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install extra packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz
+
+      - name: Run tox
+        run: uv run --only-group=tox tox run -e docs
+
+      - name: Upload to LSST the Docs
+        uses: lsst-sqre/ltd-upload@v1
+        with:
+          project: "sasquatch"
+          dir: "docs/_build/html"
+          username: ${{ secrets.LTD_USERNAME }}
+          password: ${{ secrets.LTD_PASSWORD }}
+        if: >
+          github.event_name != 'merge_group'
+          && (github.event_name != 'pull_request'
+              || startsWith(github.head_ref, 'tickets/'))
+
+  docs-linkcheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Ensure the documentation gets the right version.
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install extra packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz
+
+      - name: Run tox
+        run: uv run --only-group=tox tox run -e docs-linkcheck
