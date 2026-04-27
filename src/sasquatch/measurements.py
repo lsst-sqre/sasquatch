@@ -1,17 +1,17 @@
 """Commands for working with InfluxDB line protocol measurements."""
 
-import fileinput
 from collections import defaultdict
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 import click
 
-from .fields import _find_unquoted_separator, _split_field, _split_fields
+from .fields import _extract_measurement_and_field_keys
 from .tags import (
     _escape_tag_key,
+    _extract_measurement_and_tag_keys,
     _find_unescaped_separator,
-    _split_unescaped,
-    _unescape,
+    _unescape_if_needed,
 )
 
 
@@ -28,11 +28,13 @@ def _drop_measurement_from_line(line: str, measurement_to_drop: str) -> str:
         return line
 
     series_key = content[:field_separator]
-    parts = _split_unescaped(series_key, ",")
-    if not parts:
-        return line
-
-    line_measurement = _unescape(parts[0])
+    first_tag_separator = _find_unescaped_separator(series_key, ",")
+    measurement_part = (
+        series_key
+        if first_tag_separator == -1
+        else series_key[:first_tag_separator]
+    )
+    line_measurement = _unescape_if_needed(measurement_part)
     if line_measurement == measurement_to_drop:
         return ""
 
@@ -57,17 +59,21 @@ def _rename_measurement_in_line(
 
     series_key = content[:field_separator]
     remainder = content[field_separator:]
-    parts = _split_unescaped(series_key, ",")
-    if not parts:
-        return line
-
-    line_measurement = _unescape(parts[0])
+    first_tag_separator = _find_unescaped_separator(series_key, ",")
+    measurement_part = (
+        series_key
+        if first_tag_separator == -1
+        else series_key[:first_tag_separator]
+    )
+    line_measurement = _unescape_if_needed(measurement_part)
     if line_measurement != measurement_to_rename:
         return line
 
     escaped_measurement = _escape_tag_key(new_measurement_name)
-    renamed_parts = [escaped_measurement, *parts[1:]]
-    return f"{','.join(renamed_parts)}{remainder}{line_ending}"
+    if first_tag_separator == -1:
+        return f"{escaped_measurement}{remainder}{line_ending}"
+    suffix = series_key[first_tag_separator:]
+    return f"{escaped_measurement}{suffix}{remainder}{line_ending}"
 
 
 def extract_measurement_keys(
@@ -80,44 +86,17 @@ def extract_measurement_keys(
 
     with path.open("r", encoding="utf-8") as file_handle:
         for raw_line in file_handle:
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
+            parsed_tags = _extract_measurement_and_tag_keys(raw_line)
+            if parsed_tags is not None:
+                measurement, tag_keys = parsed_tags
+                measurement_tags[measurement].update(tag_keys)
+            else:
                 continue
 
-            field_separator = _find_unescaped_separator(line, " ")
-            if field_separator == -1:
-                continue
-
-            series_key = line[:field_separator]
-            field_and_timestamp = line[field_separator + 1 :]
-            field_end = _find_unquoted_separator(field_and_timestamp, " ")
-            field_set = (
-                field_and_timestamp
-                if field_end == -1
-                else field_and_timestamp[:field_end]
-            )
-
-            parts = _split_unescaped(series_key, ",")
-            if not parts:
-                continue
-
-            measurement = _unescape(parts[0])
-            measurement_tags[measurement]
-            measurement_fields[measurement]
-
-            for tag in parts[1:]:
-                separator_index = _find_unescaped_separator(tag, "=")
-                if separator_index == -1:
-                    continue
-                tag_key = _unescape(tag[:separator_index])
-                measurement_tags[measurement].add(tag_key)
-
-            for field in _split_fields(field_set):
-                field_parts = _split_field(field)
-                if field_parts is None:
-                    continue
-                field_key, _field_value = field_parts
-                measurement_fields[measurement].add(field_key)
+            parsed_fields = _extract_measurement_and_field_keys(raw_line)
+            if parsed_fields is not None:
+                _measurement, field_keys = parsed_fields
+                measurement_fields[measurement].update(field_keys)
 
     return {
         measurement: {
@@ -130,17 +109,32 @@ def extract_measurement_keys(
 
 def drop_measurement(file_path: str | Path, measurement_name: str) -> int:
     """Remove a measurement from an InfluxDB line protocol file in place."""
+    path = Path(file_path)
     modified_line_count = 0
-    with fileinput.input(
-        files=(str(file_path),),
-        inplace=True,
-        encoding="utf-8",
-    ) as lines:
-        for line in lines:
-            updated_line = _drop_measurement_from_line(line, measurement_name)
-            if updated_line != line:
-                modified_line_count += 1
-            click.echo(updated_line, nl=False)
+    temp_path: Path | None = None
+
+    try:
+        with path.open("r", encoding="utf-8") as input_handle:
+            with NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=path.parent,
+                delete=False,
+            ) as temp_handle:
+                temp_path = Path(temp_handle.name)
+                for line in input_handle:
+                    updated_line = _drop_measurement_from_line(
+                        line, measurement_name
+                    )
+                    if updated_line != line:
+                        modified_line_count += 1
+                    temp_handle.write(updated_line)
+        if temp_path is not None:
+            temp_path.replace(path)
+    except Exception:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        raise
     return modified_line_count
 
 
@@ -150,21 +144,34 @@ def rename_measurement(
     new_measurement_name: str,
 ) -> int:
     """Rename a measurement in an InfluxDB line protocol file in place."""
+    path = Path(file_path)
     modified_line_count = 0
-    with fileinput.input(
-        files=(str(file_path),),
-        inplace=True,
-        encoding="utf-8",
-    ) as lines:
-        for line in lines:
-            updated_line = _rename_measurement_in_line(
-                line,
-                measurement_name,
-                new_measurement_name,
-            )
-            if updated_line != line:
-                modified_line_count += 1
-            click.echo(updated_line, nl=False)
+    temp_path: Path | None = None
+
+    try:
+        with path.open("r", encoding="utf-8") as input_handle:
+            with NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=path.parent,
+                delete=False,
+            ) as temp_handle:
+                temp_path = Path(temp_handle.name)
+                for line in input_handle:
+                    updated_line = _rename_measurement_in_line(
+                        line,
+                        measurement_name,
+                        new_measurement_name,
+                    )
+                    if updated_line != line:
+                        modified_line_count += 1
+                    temp_handle.write(updated_line)
+        if temp_path is not None:
+            temp_path.replace(path)
+    except Exception:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        raise
     return modified_line_count
 
 

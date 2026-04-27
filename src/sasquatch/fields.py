@@ -1,16 +1,16 @@
 """Commands for working with InfluxDB line protocol fields."""
 
-import fileinput
 from collections import defaultdict
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 import click
 
 from .tags import (
     _escape_tag_key,
     _find_unescaped_separator,
-    _split_unescaped,
     _unescape,
+    _unescape_if_needed,
 )
 
 
@@ -79,7 +79,89 @@ def _split_field(field: str) -> tuple[str, str] | None:
     return field_key, field_value
 
 
-def _drop_field_from_line(
+def _extract_measurement_from_series_key(series_key: str) -> str:
+    """Extract the measurement name from a series key."""
+    first_tag_separator = _find_unescaped_separator(series_key, ",")
+    measurement_part = (
+        series_key
+        if first_tag_separator == -1
+        else series_key[:first_tag_separator]
+    )
+    return _unescape_if_needed(measurement_part)
+
+
+def _split_record_content(
+    content: str,
+) -> tuple[str, str, str] | None:
+    """Split record content into series key, field set, and any remainder."""
+    series_separator = _find_unescaped_separator(content, " ")
+    if series_separator == -1:
+        return None
+
+    series_key = content[:series_separator]
+    field_and_timestamp = content[series_separator + 1 :]
+    field_end = _find_unquoted_separator(field_and_timestamp, " ")
+    field_set = (
+        field_and_timestamp
+        if field_end == -1
+        else field_and_timestamp[:field_end]
+    )
+    remainder = "" if field_end == -1 else field_and_timestamp[field_end:]
+    return series_key, field_set, remainder
+
+
+def _extract_measurement_and_field_keys(  # noqa: C901
+    line: str,
+) -> tuple[str, set[str]] | None:
+    """Extract a measurement name and field keys with one pass over fields."""
+    content = line.rstrip("\n")
+    stripped_line = content.lstrip()
+    if not stripped_line or stripped_line.startswith("#"):
+        return None
+
+    record_parts = _split_record_content(content)
+    if record_parts is None:
+        return None
+
+    series_key, field_set, _remainder = record_parts
+    measurement = _extract_measurement_from_series_key(series_key)
+
+    field_keys: set[str] = set()
+    escaped = False
+    in_quotes = False
+    field_start = 0
+    separator_index = -1
+
+    for index, char in enumerate(field_set):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == '"':
+            in_quotes = not in_quotes
+            continue
+        if char == "=" and separator_index == -1 and not in_quotes:
+            separator_index = index
+            continue
+        if char == "," and not in_quotes:
+            if separator_index != -1:
+                field_keys.add(
+                    _unescape_if_needed(field_set[field_start:separator_index])
+                )
+            field_start = index + 1
+            separator_index = -1
+
+    if separator_index != -1:
+        field_keys.add(
+            _unescape_if_needed(field_set[field_start:separator_index])
+        )
+
+    return measurement, field_keys
+
+
+def _drop_field_from_line(  # noqa: C901, PLR0912
     line: str,
     field_key_to_drop: str,
     *,
@@ -92,44 +174,63 @@ def _drop_field_from_line(
     if not stripped_line or stripped_line.startswith("#"):
         return line
 
-    series_separator = _find_unescaped_separator(content, " ")
-    if series_separator == -1:
+    record_parts = _split_record_content(content)
+    if record_parts is None:
         return line
 
-    series_key = content[:series_separator]
-    field_and_timestamp = content[series_separator + 1 :]
-    field_end = _find_unquoted_separator(field_and_timestamp, " ")
-    field_set = (
-        field_and_timestamp
-        if field_end == -1
-        else field_and_timestamp[:field_end]
-    )
-    remainder = "" if field_end == -1 else field_and_timestamp[field_end:]
-    measurement_parts = _split_unescaped(series_key, ",")
-    if not measurement_parts:
-        return line
-
-    line_measurement = _unescape(measurement_parts[0])
+    series_key, field_set, remainder = record_parts
+    line_measurement = _extract_measurement_from_series_key(series_key)
     if measurement is not None and line_measurement != measurement:
         return line
 
-    kept_fields: list[str] = []
-    for field in _split_fields(field_set):
-        field_parts = _split_field(field)
-        if field_parts is None:
-            kept_fields.append(field)
-            continue
-        field_key, _field_value = field_parts
-        if field_key != field_key_to_drop:
-            kept_fields.append(field)
+    kept_parts: list[str] = []
+    escaped = False
+    in_quotes = False
+    field_start = 0
+    separator_index = -1
 
-    if not kept_fields:
+    for index, char in enumerate(field_set):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == '"':
+            in_quotes = not in_quotes
+            continue
+        if char == "=" and separator_index == -1 and not in_quotes:
+            separator_index = index
+            continue
+        if char == "," and not in_quotes:
+            field = field_set[field_start:index]
+            if separator_index == -1:
+                kept_parts.append(field)
+            else:
+                field_key = _unescape_if_needed(
+                    field_set[field_start:separator_index]
+                )
+                if field_key != field_key_to_drop:
+                    kept_parts.append(field)
+            field_start = index + 1
+            separator_index = -1
+
+    final_field = field_set[field_start:]
+    if separator_index == -1:
+        if final_field:
+            kept_parts.append(final_field)
+    else:
+        field_key = _unescape_if_needed(field_set[field_start:separator_index])
+        if field_key != field_key_to_drop:
+            kept_parts.append(final_field)
+
+    if not kept_parts:
         return ""
 
-    return f"{series_key} {','.join(kept_fields)}{remainder}{line_ending}"
+    return f"{series_key} {','.join(kept_parts)}{remainder}{line_ending}"
 
 
-def _rename_field_in_line(
+def _rename_field_in_line(  # noqa: C901, PLR0912, PLR0915
     line: str,
     field_key_to_rename: str,
     new_field_key: str,
@@ -143,44 +244,67 @@ def _rename_field_in_line(
     if not stripped_line or stripped_line.startswith("#"):
         return line
 
-    series_separator = _find_unescaped_separator(content, " ")
-    if series_separator == -1:
+    record_parts = _split_record_content(content)
+    if record_parts is None:
         return line
 
-    series_key = content[:series_separator]
-    field_and_timestamp = content[series_separator + 1 :]
-    field_end = _find_unquoted_separator(field_and_timestamp, " ")
-    field_set = (
-        field_and_timestamp
-        if field_end == -1
-        else field_and_timestamp[:field_end]
-    )
-    remainder = "" if field_end == -1 else field_and_timestamp[field_end:]
-    measurement_parts = _split_unescaped(series_key, ",")
-    if not measurement_parts:
-        return line
-
-    line_measurement = _unescape(measurement_parts[0])
+    series_key, field_set, remainder = record_parts
+    line_measurement = _extract_measurement_from_series_key(series_key)
     if measurement is not None and line_measurement != measurement:
         return line
 
-    renamed_fields: list[str] = []
     escaped_new_field_key = _escape_tag_key(new_field_key)
-    for field in _split_fields(field_set):
-        separator_index = _find_unescaped_separator(field, "=")
-        if separator_index == -1:
-            renamed_fields.append(field)
-            continue
+    renamed_parts: list[str] = []
+    escaped = False
+    in_quotes = False
+    field_start = 0
+    separator_index = -1
 
-        field_key = _unescape(field[:separator_index])
+    for index, char in enumerate(field_set):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == '"':
+            in_quotes = not in_quotes
+            continue
+        if char == "=" and separator_index == -1 and not in_quotes:
+            separator_index = index
+            continue
+        if char == "," and not in_quotes:
+            field = field_set[field_start:index]
+            if separator_index == -1:
+                renamed_parts.append(field)
+            else:
+                field_key = _unescape_if_needed(
+                    field_set[field_start:separator_index]
+                )
+                if field_key == field_key_to_rename:
+                    field_value = field_set[separator_index + 1 : index]
+                    renamed_parts.append(
+                        f"{escaped_new_field_key}={field_value}"
+                    )
+                else:
+                    renamed_parts.append(field)
+            field_start = index + 1
+            separator_index = -1
+
+    final_field = field_set[field_start:]
+    if separator_index == -1:
+        if final_field:
+            renamed_parts.append(final_field)
+    else:
+        field_key = _unescape_if_needed(field_set[field_start:separator_index])
         if field_key == field_key_to_rename:
-            renamed_fields.append(
-                f"{escaped_new_field_key}={field[separator_index + 1 :]}"
+            renamed_parts.append(
+                f"{escaped_new_field_key}={field_set[separator_index + 1 :]}"
             )
         else:
-            renamed_fields.append(field)
+            renamed_parts.append(final_field)
 
-    return f"{series_key} {','.join(renamed_fields)}{remainder}{line_ending}"
+    return f"{series_key} {','.join(renamed_parts)}{remainder}{line_ending}"
 
 
 def extract_measurement_field_keys(
@@ -192,35 +316,12 @@ def extract_measurement_field_keys(
 
     with path.open("r", encoding="utf-8") as file_handle:
         for raw_line in file_handle:
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
+            parsed_line = _extract_measurement_and_field_keys(raw_line)
+            if parsed_line is None:
                 continue
 
-            series_separator = _find_unescaped_separator(line, " ")
-            if series_separator == -1:
-                continue
-
-            series_key = line[:series_separator]
-            field_and_timestamp = line[series_separator + 1 :]
-            field_end = _find_unquoted_separator(field_and_timestamp, " ")
-            field_set = (
-                field_and_timestamp
-                if field_end == -1
-                else field_and_timestamp[:field_end]
-            )
-
-            measurement_parts = _split_unescaped(series_key, ",")
-            if not measurement_parts:
-                continue
-
-            measurement = _unescape(measurement_parts[0])
-            measurement_fields[measurement]
-
-            for field in _split_fields(field_set):
-                field_parts = _split_field(field)
-                if field_parts is not None:
-                    field_key, _field_value = field_parts
-                    measurement_fields[measurement].add(field_key)
+            measurement, field_keys = parsed_line
+            measurement_fields[measurement].update(field_keys)
 
     return {
         measurement: sorted(fields)
@@ -235,21 +336,34 @@ def drop_measurement_field_key(
     measurement: str | None = None,
 ) -> int:
     """Remove a field key from an InfluxDB line protocol file in place."""
+    path = Path(file_path)
     modified_line_count = 0
-    with fileinput.input(
-        files=(str(file_path),),
-        inplace=True,
-        encoding="utf-8",
-    ) as lines:
-        for line in lines:
-            updated_line = _drop_field_from_line(
-                line,
-                field_key_to_drop,
-                measurement=measurement,
-            )
-            if updated_line != line:
-                modified_line_count += 1
-            click.echo(updated_line, nl=False)
+    temp_path: Path | None = None
+
+    try:
+        with path.open("r", encoding="utf-8") as input_handle:
+            with NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=path.parent,
+                delete=False,
+            ) as temp_handle:
+                temp_path = Path(temp_handle.name)
+                for line in input_handle:
+                    updated_line = _drop_field_from_line(
+                        line,
+                        field_key_to_drop,
+                        measurement=measurement,
+                    )
+                    if updated_line != line:
+                        modified_line_count += 1
+                    temp_handle.write(updated_line)
+        if temp_path is not None:
+            temp_path.replace(path)
+    except Exception:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        raise
     return modified_line_count
 
 
@@ -261,22 +375,35 @@ def rename_measurement_field_key(
     measurement: str | None = None,
 ) -> int:
     """Rename a field key in an InfluxDB line protocol file in place."""
+    path = Path(file_path)
     modified_line_count = 0
-    with fileinput.input(
-        files=(str(file_path),),
-        inplace=True,
-        encoding="utf-8",
-    ) as lines:
-        for line in lines:
-            updated_line = _rename_field_in_line(
-                line,
-                field_key_to_rename,
-                new_field_key,
-                measurement=measurement,
-            )
-            if updated_line != line:
-                modified_line_count += 1
-            click.echo(updated_line, nl=False)
+    temp_path: Path | None = None
+
+    try:
+        with path.open("r", encoding="utf-8") as input_handle:
+            with NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=path.parent,
+                delete=False,
+            ) as temp_handle:
+                temp_path = Path(temp_handle.name)
+                for line in input_handle:
+                    updated_line = _rename_field_in_line(
+                        line,
+                        field_key_to_rename,
+                        new_field_key,
+                        measurement=measurement,
+                    )
+                    if updated_line != line:
+                        modified_line_count += 1
+                    temp_handle.write(updated_line)
+        if temp_path is not None:
+            temp_path.replace(path)
+    except Exception:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        raise
     return modified_line_count
 
 
