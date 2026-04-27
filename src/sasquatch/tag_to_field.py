@@ -3,36 +3,22 @@
 from __future__ import annotations
 
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 
 import click
 
-from .fields import _find_unquoted_separator
-from .tags import _find_unescaped_separator, _unescape_if_needed
+from .line_protocol import (
+    _extract_measurement_from_series_key,
+    _find_unescaped_separator,
+    _iter_field_ranges,
+    _iter_tag_ranges,
+    _rewrite_file_in_place,
+    _split_record_content,
+    _unescape_if_needed,
+)
 
 
 class TagToFieldConflictError(Exception):
     """Raised when a tag-to-field conversion would overwrite a field."""
-
-
-def _split_record_content(
-    content: str,
-) -> tuple[str, str, str] | None:
-    """Split record content into series key, field set, and any remainder."""
-    field_separator = _find_unescaped_separator(content, " ")
-    if field_separator == -1:
-        return None
-
-    series_key = content[:field_separator]
-    field_and_timestamp = content[field_separator + 1 :]
-    field_end = _find_unquoted_separator(field_and_timestamp, " ")
-    field_set = (
-        field_and_timestamp
-        if field_end == -1
-        else field_and_timestamp[:field_end]
-    )
-    remainder = "" if field_end == -1 else field_and_timestamp[field_end:]
-    return series_key, field_set, remainder
 
 
 def _escape_string_field_value(value: str) -> str:
@@ -42,47 +28,22 @@ def _escape_string_field_value(value: str) -> str:
     return f'"{escaped}"'
 
 
-def _append_converted_field(  # noqa: C901
+def _append_converted_field(
     field_set: str,
     tag_key: str,
     converted_tag_value: str,
     line_measurement: str,
 ) -> str:
     """Append the converted tag as a string field, checking for conflicts."""
-    escaped = False
-    in_quotes = False
-    field_start = 0
-    separator_index = -1
     field_end = len(field_set)
 
-    for index, char in enumerate(field_set):
-        if escaped:
-            escaped = False
+    for (
+        field_start,
+        _field_end,
+        separator_index,
+    ) in _iter_field_ranges(field_set):
+        if separator_index == -1:
             continue
-        if char == "\\":
-            escaped = True
-            continue
-        if char == '"':
-            in_quotes = not in_quotes
-            continue
-        if char == "=" and separator_index == -1 and not in_quotes:
-            separator_index = index
-            continue
-        if char == "," and not in_quotes:
-            if separator_index != -1:
-                field_key = _unescape_if_needed(
-                    field_set[field_start:separator_index]
-                )
-                if field_key == tag_key:
-                    raise TagToFieldConflictError(
-                        f"Cannot convert tag {tag_key!r} to field for "
-                        "measurement "
-                        f"{line_measurement!r}: field already exists."
-                    )
-            field_start = index + 1
-            separator_index = -1
-
-    if separator_index != -1:
         field_key = _unescape_if_needed(field_set[field_start:separator_index])
         if field_key == tag_key:
             raise TagToFieldConflictError(
@@ -96,7 +57,7 @@ def _append_converted_field(  # noqa: C901
     )
 
 
-def _convert_series_key_tag(  # noqa: C901
+def _convert_series_key_tag(
     series_key: str,
     tag_key: str,
     *,
@@ -105,36 +66,22 @@ def _convert_series_key_tag(  # noqa: C901
     """Convert a tag out of the series key and return conversion details."""
     first_tag_separator = _find_unescaped_separator(series_key, ",")
     if first_tag_separator == -1:
-        return series_key, None, _unescape_if_needed(series_key)
+        return (
+            series_key,
+            None,
+            _extract_measurement_from_series_key(series_key),
+        )
 
     measurement_part = series_key[:first_tag_separator]
-    line_measurement = _unescape_if_needed(measurement_part)
+    line_measurement = _extract_measurement_from_series_key(series_key)
     if measurement is not None and line_measurement != measurement:
         return series_key, None, line_measurement
 
     kept_parts = [measurement_part]
     converted_tag_value: str | None = None
-    tag_start = first_tag_separator + 1
-    series_length = len(series_key)
-
-    while tag_start < series_length:
-        index = tag_start
-        escaped = False
-        separator_index = -1
-
-        while index < series_length:
-            char = series_key[index]
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == "=" and separator_index == -1:
-                separator_index = index
-            elif char == ",":
-                break
-            index += 1
-
-        tag_end = index
+    for tag_start, tag_end, separator_index in _iter_tag_ranges(
+        series_key, first_tag_separator + 1
+    ):
         tag = series_key[tag_start:tag_end]
 
         if separator_index == -1:
@@ -149,8 +96,6 @@ def _convert_series_key_tag(  # noqa: C901
                 )
             else:
                 kept_parts.append("," + tag)
-
-        tag_start = tag_end + 1
 
     return "".join(kept_parts), converted_tag_value, line_measurement
 
@@ -195,36 +140,14 @@ def convert_tag_to_field(
     measurement: str | None = None,
 ) -> int:
     """Convert a tag key into a string field in a line protocol file."""
-    path = Path(file_path)
-    modified_line_count = 0
-    temp_path: Path | None = None
-
-    try:
-        with path.open("r", encoding="utf-8") as input_handle:
-            with NamedTemporaryFile(
-                "w",
-                encoding="utf-8",
-                dir=path.parent,
-                delete=False,
-            ) as temp_handle:
-                temp_path = Path(temp_handle.name)
-                for line in input_handle:
-                    updated_line = _convert_tag_to_field_in_line(
-                        line,
-                        tag_key,
-                        measurement=measurement,
-                    )
-                    if updated_line != line:
-                        modified_line_count += 1
-                    temp_handle.write(updated_line)
-        if temp_path is not None:
-            temp_path.replace(path)
-    except Exception:
-        if temp_path is not None:
-            temp_path.unlink(missing_ok=True)
-        raise
-
-    return modified_line_count
+    return _rewrite_file_in_place(
+        file_path,
+        lambda line: _convert_tag_to_field_in_line(
+            line,
+            tag_key,
+            measurement=measurement,
+        ),
+    )
 
 
 @click.command("convert-tag-to-field")

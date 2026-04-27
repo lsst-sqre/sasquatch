@@ -2,16 +2,16 @@
 
 from collections import defaultdict
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 
 import click
 
-from .fields import _extract_measurement_and_field_keys
-from .tags import (
+from .line_protocol import (
     _escape_tag_key,
+    _extract_measurement_and_field_keys,
     _extract_measurement_and_tag_keys,
+    _extract_measurement_from_series_key,
     _find_unescaped_separator,
-    _unescape_if_needed,
+    _rewrite_file_in_place,
 )
 
 
@@ -28,13 +28,7 @@ def _drop_measurement_from_line(line: str, measurement_to_drop: str) -> str:
         return line
 
     series_key = content[:field_separator]
-    first_tag_separator = _find_unescaped_separator(series_key, ",")
-    measurement_part = (
-        series_key
-        if first_tag_separator == -1
-        else series_key[:first_tag_separator]
-    )
-    line_measurement = _unescape_if_needed(measurement_part)
+    line_measurement = _extract_measurement_from_series_key(series_key)
     if line_measurement == measurement_to_drop:
         return ""
 
@@ -60,12 +54,7 @@ def _rename_measurement_in_line(
     series_key = content[:field_separator]
     remainder = content[field_separator:]
     first_tag_separator = _find_unescaped_separator(series_key, ",")
-    measurement_part = (
-        series_key
-        if first_tag_separator == -1
-        else series_key[:first_tag_separator]
-    )
-    line_measurement = _unescape_if_needed(measurement_part)
+    line_measurement = _extract_measurement_from_series_key(series_key)
     if line_measurement != measurement_to_rename:
         return line
 
@@ -109,33 +98,10 @@ def extract_measurement_keys(
 
 def drop_measurement(file_path: str | Path, measurement_name: str) -> int:
     """Remove a measurement from an InfluxDB line protocol file in place."""
-    path = Path(file_path)
-    modified_line_count = 0
-    temp_path: Path | None = None
-
-    try:
-        with path.open("r", encoding="utf-8") as input_handle:
-            with NamedTemporaryFile(
-                "w",
-                encoding="utf-8",
-                dir=path.parent,
-                delete=False,
-            ) as temp_handle:
-                temp_path = Path(temp_handle.name)
-                for line in input_handle:
-                    updated_line = _drop_measurement_from_line(
-                        line, measurement_name
-                    )
-                    if updated_line != line:
-                        modified_line_count += 1
-                    temp_handle.write(updated_line)
-        if temp_path is not None:
-            temp_path.replace(path)
-    except Exception:
-        if temp_path is not None:
-            temp_path.unlink(missing_ok=True)
-        raise
-    return modified_line_count
+    return _rewrite_file_in_place(
+        file_path,
+        lambda line: _drop_measurement_from_line(line, measurement_name),
+    )
 
 
 def rename_measurement(
@@ -144,35 +110,14 @@ def rename_measurement(
     new_measurement_name: str,
 ) -> int:
     """Rename a measurement in an InfluxDB line protocol file in place."""
-    path = Path(file_path)
-    modified_line_count = 0
-    temp_path: Path | None = None
-
-    try:
-        with path.open("r", encoding="utf-8") as input_handle:
-            with NamedTemporaryFile(
-                "w",
-                encoding="utf-8",
-                dir=path.parent,
-                delete=False,
-            ) as temp_handle:
-                temp_path = Path(temp_handle.name)
-                for line in input_handle:
-                    updated_line = _rename_measurement_in_line(
-                        line,
-                        measurement_name,
-                        new_measurement_name,
-                    )
-                    if updated_line != line:
-                        modified_line_count += 1
-                    temp_handle.write(updated_line)
-        if temp_path is not None:
-            temp_path.replace(path)
-    except Exception:
-        if temp_path is not None:
-            temp_path.unlink(missing_ok=True)
-        raise
-    return modified_line_count
+    return _rewrite_file_in_place(
+        file_path,
+        lambda line: _rename_measurement_in_line(
+            line,
+            measurement_name,
+            new_measurement_name,
+        ),
+    )
 
 
 @click.command("show-measurements")

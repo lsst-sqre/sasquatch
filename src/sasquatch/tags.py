@@ -2,170 +2,20 @@
 
 from collections import defaultdict
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 
 import click
 
-
-def _find_unescaped_separator(text: str, separator: str) -> int:
-    """Find the first separator character that is not escaped."""
-    escaped = False
-    for index, char in enumerate(text):
-        if escaped:
-            escaped = False
-            continue
-        if char == "\\":
-            escaped = True
-            continue
-        if char == separator:
-            return index
-    return -1
+from .line_protocol import (
+    _escape_tag_key,
+    _extract_measurement_and_tag_keys,
+    _find_unescaped_separator,
+    _iter_tag_ranges,
+    _rewrite_file_in_place,
+    _unescape_if_needed,
+)
 
 
-def _split_unescaped(text: str, separator: str) -> list[str]:
-    """Split a string on unescaped separator characters."""
-    parts: list[str] = []
-    current: list[str] = []
-    escaped = False
-
-    for char in text:
-        if escaped:
-            current.append(char)
-            escaped = False
-            continue
-        if char == "\\":
-            escaped = True
-            current.append(char)
-            continue
-        if char == separator:
-            parts.append("".join(current))
-            current = []
-            continue
-        current.append(char)
-
-    if escaped:
-        current.append("\\")
-
-    parts.append("".join(current))
-    return parts
-
-
-def _unescape(value: str) -> str:
-    """Unescape line protocol identifier content."""
-    result: list[str] = []
-    escaped = False
-
-    for char in value:
-        if escaped:
-            result.append(char)
-            escaped = False
-            continue
-        if char == "\\":
-            escaped = True
-            continue
-        result.append(char)
-
-    if escaped:
-        result.append("\\")
-
-    return "".join(result)
-
-
-def _escape_tag_key(value: str) -> str:
-    """Escape a tag key for line protocol output."""
-    escaped = value.replace("\\", "\\\\")
-    escaped = escaped.replace(",", "\\,")
-    escaped = escaped.replace(" ", "\\ ")
-    return escaped.replace("=", "\\=")
-
-
-def _split_tag(tag: str) -> tuple[str, str] | None:
-    """Split a tag assignment into key and value."""
-    separator_index = _find_unescaped_separator(tag, "=")
-    if separator_index == -1:
-        return None
-
-    tag_key = _unescape(tag[:separator_index])
-    tag_value = _unescape(tag[separator_index + 1 :])
-    return tag_key, tag_value
-
-
-def _unescape_if_needed(value: str) -> str:
-    """Unescape a value only when it contains escapes."""
-    return _unescape(value) if "\\" in value else value
-
-
-def _extract_measurement_and_tag_keys(  # noqa: C901, PLR0912, PLR0915
-    line: str,
-) -> tuple[str, set[str]] | None:
-    """Extract a measurement name and tag keys with one pass over the line."""
-    stripped_line = line.lstrip()
-    if not stripped_line or stripped_line.startswith("#"):
-        return None
-
-    measurement_chars: list[str] = []
-    tag_keys: set[str] = set()
-    tag_key_chars: list[str] = []
-    escaped = False
-    in_tag_key = False
-    in_tag_value = False
-
-    for char in line:
-        if escaped:
-            if in_tag_key:
-                tag_key_chars.append(char)
-            elif not in_tag_value:
-                measurement_chars.append(char)
-            escaped = False
-            continue
-
-        if char == "\\":
-            escaped = True
-            if in_tag_key:
-                tag_key_chars.append(char)
-            elif not in_tag_value:
-                measurement_chars.append(char)
-            continue
-
-        if in_tag_value:
-            if char == ",":
-                in_tag_value = False
-                in_tag_key = True
-                tag_key_chars = []
-                continue
-            if char == " ":
-                break
-            continue
-
-        if in_tag_key:
-            if char == "=":
-                tag_keys.add(_unescape_if_needed("".join(tag_key_chars)))
-                in_tag_key = False
-                in_tag_value = True
-                continue
-            if char == ",":
-                tag_key_chars = []
-                continue
-            if char == " ":
-                break
-            tag_key_chars.append(char)
-            continue
-
-        if char == ",":
-            in_tag_key = True
-            continue
-        if char == " ":
-            break
-        measurement_chars.append(char)
-
-    if not measurement_chars:
-        return None
-
-    measurement = _unescape_if_needed("".join(measurement_chars))
-    return measurement, tag_keys
-
-
-def _rename_tag_in_line(  # noqa: C901, PLR0912
+def _rename_tag_in_line(
     line: str,
     tag_key_to_rename: str,
     new_tag_key: str,
@@ -194,27 +44,9 @@ def _rename_tag_in_line(  # noqa: C901, PLR0912
 
     renamed_parts = [measurement_part]
     escaped_new_tag_key = _escape_tag_key(new_tag_key)
-    tag_start = first_tag_separator + 1
-    series_length = len(series_key)
-
-    while tag_start < series_length:
-        index = tag_start
-        escaped = False
-        separator_index = -1
-
-        while index < series_length:
-            char = series_key[index]
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == "=" and separator_index == -1:
-                separator_index = index
-            elif char == ",":
-                break
-            index += 1
-
-        tag_end = index
+    for tag_start, tag_end, separator_index in _iter_tag_ranges(
+        series_key, first_tag_separator + 1
+    ):
         tag = series_key[tag_start:tag_end]
 
         if separator_index == -1:
@@ -229,12 +61,10 @@ def _rename_tag_in_line(  # noqa: C901, PLR0912
             else:
                 renamed_parts.append("," + tag)
 
-        tag_start = tag_end + 1
-
     return "".join(renamed_parts) + remainder
 
 
-def _drop_tag_from_line(  # noqa: C901, PLR0912
+def _drop_tag_from_line(
     line: str,
     tag_key_to_drop: str,
     *,
@@ -261,27 +91,9 @@ def _drop_tag_from_line(  # noqa: C901, PLR0912
         return line
 
     kept_parts = [measurement_part]
-    tag_start = first_tag_separator + 1
-    series_length = len(series_key)
-
-    while tag_start < series_length:
-        index = tag_start
-        escaped = False
-        separator_index = -1
-
-        while index < series_length:
-            char = series_key[index]
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == "=" and separator_index == -1:
-                separator_index = index
-            elif char == ",":
-                break
-            index += 1
-
-        tag_end = index
+    for tag_start, tag_end, separator_index in _iter_tag_ranges(
+        series_key, first_tag_separator + 1
+    ):
         tag = series_key[tag_start:tag_end]
 
         if separator_index == -1:
@@ -292,8 +104,6 @@ def _drop_tag_from_line(  # noqa: C901, PLR0912
             )
             if tag_key != tag_key_to_drop:
                 kept_parts.append("," + tag)
-
-        tag_start = tag_end + 1
 
     return "".join(kept_parts) + remainder
 
@@ -325,36 +135,14 @@ def drop_measurement_tag_key(
     measurement: str | None = None,
 ) -> int:
     """Remove a tag key from an InfluxDB line protocol file in place."""
-    path = Path(file_path)
-    modified_line_count = 0
-    temp_path: Path | None = None
-
-    try:
-        with path.open("r", encoding="utf-8") as input_handle:
-            with NamedTemporaryFile(
-                "w",
-                encoding="utf-8",
-                dir=path.parent,
-                delete=False,
-            ) as temp_handle:
-                temp_path = Path(temp_handle.name)
-                for line in input_handle:
-                    updated_line = _drop_tag_from_line(
-                        line,
-                        tag_key_to_drop,
-                        measurement=measurement,
-                    )
-                    if updated_line != line:
-                        modified_line_count += 1
-                    temp_handle.write(updated_line)
-        if temp_path is not None:
-            temp_path.replace(path)
-    except Exception:
-        if temp_path is not None:
-            temp_path.unlink(missing_ok=True)
-        raise
-
-    return modified_line_count
+    return _rewrite_file_in_place(
+        file_path,
+        lambda line: _drop_tag_from_line(
+            line,
+            tag_key_to_drop,
+            measurement=measurement,
+        ),
+    )
 
 
 def rename_measurement_tag_key(
@@ -365,36 +153,15 @@ def rename_measurement_tag_key(
     measurement: str | None = None,
 ) -> int:
     """Rename a tag key in an InfluxDB line protocol file in place."""
-    path = Path(file_path)
-    modified_line_count = 0
-    temp_path: Path | None = None
-
-    try:
-        with path.open("r", encoding="utf-8") as input_handle:
-            with NamedTemporaryFile(
-                "w",
-                encoding="utf-8",
-                dir=path.parent,
-                delete=False,
-            ) as temp_handle:
-                temp_path = Path(temp_handle.name)
-                for line in input_handle:
-                    updated_line = _rename_tag_in_line(
-                        line,
-                        tag_key_to_rename,
-                        new_tag_key,
-                        measurement=measurement,
-                    )
-                    if updated_line != line:
-                        modified_line_count += 1
-                    temp_handle.write(updated_line)
-        if temp_path is not None:
-            temp_path.replace(path)
-    except Exception:
-        if temp_path is not None:
-            temp_path.unlink(missing_ok=True)
-        raise
-    return modified_line_count
+    return _rewrite_file_in_place(
+        file_path,
+        lambda line: _rename_tag_in_line(
+            line,
+            tag_key_to_rename,
+            new_tag_key,
+            measurement=measurement,
+        ),
+    )
 
 
 @click.command("show-tags")
