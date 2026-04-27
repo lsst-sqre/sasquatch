@@ -3,6 +3,7 @@
 import fileinput
 from collections import defaultdict
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 import click
 
@@ -210,7 +211,7 @@ def _rename_tag_in_line(
     return ",".join(renamed_parts) + remainder
 
 
-def _drop_tag_from_line(
+def _drop_tag_from_line(  # noqa: C901, PLR0912
     line: str,
     tag_key_to_drop: str,
     *,
@@ -227,25 +228,51 @@ def _drop_tag_from_line(
 
     series_key = line[:field_separator]
     remainder = line[field_separator:]
-    parts = _split_unescaped(series_key, ",")
-    if not parts:
+    first_tag_separator = _find_unescaped_separator(series_key, ",")
+    if first_tag_separator == -1:
         return line
 
-    line_measurement = _unescape(parts[0])
+    measurement_part = series_key[:first_tag_separator]
+    line_measurement = _unescape_if_needed(measurement_part)
     if measurement is not None and line_measurement != measurement:
         return line
 
-    kept_parts = [parts[0]]
-    for tag in parts[1:]:
-        tag_parts = _split_tag(tag)
-        if tag_parts is None:
-            kept_parts.append(tag)
-            continue
-        tag_key, _tag_value = tag_parts
-        if tag_key != tag_key_to_drop:
-            kept_parts.append(tag)
+    kept_parts = [measurement_part]
+    tag_start = first_tag_separator + 1
+    series_length = len(series_key)
 
-    return ",".join(kept_parts) + remainder
+    while tag_start < series_length:
+        index = tag_start
+        escaped = False
+        separator_index = -1
+
+        while index < series_length:
+            char = series_key[index]
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == "=" and separator_index == -1:
+                separator_index = index
+            elif char == ",":
+                break
+            index += 1
+
+        tag_end = index
+        tag = series_key[tag_start:tag_end]
+
+        if separator_index == -1:
+            kept_parts.append("," + tag)
+        else:
+            tag_key = _unescape_if_needed(
+                series_key[tag_start:separator_index]
+            )
+            if tag_key != tag_key_to_drop:
+                kept_parts.append("," + tag)
+
+        tag_start = tag_end + 1
+
+    return "".join(kept_parts) + remainder
 
 
 def extract_measurement_tag_keys(
@@ -275,24 +302,35 @@ def drop_measurement_tag_key(
     measurement: str | None = None,
 ) -> int:
     """Remove a tag key from an InfluxDB line protocol file in place."""
+    path = Path(file_path)
     modified_line_count = 0
-    with fileinput.input(
-        files=(str(file_path),),
-        inplace=True,
-        encoding="utf-8",
-    ) as lines:
-        for line in lines:
-            updated_line = _drop_tag_from_line(
-                line,
-                tag_key_to_drop,
-                measurement=measurement,
-            )
-            if updated_line != line:
-                modified_line_count += 1
-            click.echo(
-                updated_line,
-                nl=False,
-            )
+    temp_path: Path | None = None
+
+    try:
+        with path.open("r", encoding="utf-8") as input_handle:
+            with NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=path.parent,
+                delete=False,
+            ) as temp_handle:
+                temp_path = Path(temp_handle.name)
+                for line in input_handle:
+                    updated_line = _drop_tag_from_line(
+                        line,
+                        tag_key_to_drop,
+                        measurement=measurement,
+                    )
+                    if updated_line != line:
+                        modified_line_count += 1
+                    temp_handle.write(updated_line)
+        if temp_path is not None:
+            temp_path.replace(path)
+    except Exception:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        raise
+
     return modified_line_count
 
 
