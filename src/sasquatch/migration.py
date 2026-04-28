@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 import tarfile
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -67,6 +70,22 @@ def _manifest_path(run_dir: Path) -> Path:
     return run_dir / "migration-manifest.json"
 
 
+def _run_dir(
+    work_dir: Path,
+    backup_dir: Path,
+    database: str,
+    retention: str,
+    shards: list[str],
+) -> Path:
+    """Return the working directory for one migration run."""
+    return work_dir / _run_dir_name(
+        backup_dir.name,
+        database,
+        retention,
+        shards,
+    )
+
+
 @dataclass
 class MigrationFileRecord:
     """Metadata for one discovered TSM file."""
@@ -79,6 +98,8 @@ class MigrationFileRecord:
     exported_at: str | None = None
     transformed_at: str | None = None
     imported_at: str | None = None
+    extracted_tsm_path: str | None = None
+    export_log_path: str | None = None
     last_error: str | None = None
 
 
@@ -247,7 +268,148 @@ def _discover_files(
     return len(manifest.files)
 
 
-def _common_run_options(function: object) -> object:
+def _extract_archive_member(
+    archive_path: Path,
+    member_name: str,
+    destination: Path,
+) -> None:
+    """Extract one TSM member from a shard archive."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(archive_path, "r:gz") as archive:
+        extracted = archive.extractfile(member_name)
+        if extracted is None:
+            raise click.ClickException(
+                f"Could not extract {member_name!r} from {archive_path}."
+            )
+        destination.write_bytes(extracted.read())
+
+
+def _run_external_command(argv: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run an external command and capture its output."""
+    try:
+        return subprocess.run(
+            argv,
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise click.ClickException(
+            f"Required executable {argv[0]!r} was not found."
+        ) from exc
+
+
+def _write_export_log(
+    log_path: Path,
+    argv: list[str],
+    result: subprocess.CompletedProcess[str],
+) -> None:
+    """Write an export command log."""
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(
+        "\n".join(
+            [
+                f"argv: {' '.join(argv)}",
+                f"returncode: {result.returncode}",
+                "",
+                "stdout:",
+                result.stdout,
+                "",
+                "stderr:",
+                result.stderr,
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def _export_files(
+    run_dir: Path,
+    manifest: MigrationManifest,
+    *,
+    force: bool,
+) -> int:
+    """Export discovered TSM files to line protocol."""
+    if not manifest.files:
+        raise click.ClickException(
+            "No discovered files found in the manifest. Run discover first."
+        )
+
+    exported_count = 0
+    for record in manifest.files:
+        export_lp_path = Path(record.export_lp_path)
+        if (
+            record.exported_at is not None
+            and export_lp_path.exists()
+            and not force
+        ):
+            continue
+
+        extracted_tsm_path = (
+            run_dir
+            / "extracted-tsm"
+            / record.shard_id
+            / Path(record.archive_member_path).name
+        )
+        _extract_archive_member(
+            Path(record.archive_path),
+            record.archive_member_path,
+            extracted_tsm_path,
+        )
+
+        export_lp_path.parent.mkdir(parents=True, exist_ok=True)
+        argv = [
+            "influx_inspect",
+            "export",
+            "-database",
+            manifest.database,
+            "-retention",
+            manifest.retention,
+            "-lponly",
+            "-tsmfile",
+            str(extracted_tsm_path),
+            "-out",
+            str(export_lp_path),
+        ]
+        result = _run_external_command(argv)
+        log_path = (
+            run_dir
+            / "logs"
+            / "export"
+            / f"{record.shard_id}-{Path(record.archive_member_path).stem}.log"
+        )
+        _write_export_log(log_path, argv, result)
+        record.extracted_tsm_path = str(extracted_tsm_path)
+        record.export_log_path = str(log_path)
+
+        if result.returncode != 0:
+            record.last_error = (
+                result.stderr.strip() or "Export command failed."
+            )
+            _save_manifest(run_dir, manifest)
+            raise click.ClickException(
+                f"Failed to export {record.archive_member_path}: "
+                f"{record.last_error}"
+            )
+
+        if not export_lp_path.exists():
+            record.last_error = (
+                "Export completed without creating the LP file."
+            )
+            _save_manifest(run_dir, manifest)
+            raise click.ClickException(record.last_error)
+
+        record.exported_at = _utc_now()
+        record.last_error = None
+        exported_count += 1
+
+    manifest.status = "exported"
+    _save_manifest(run_dir, manifest)
+    return exported_count
+
+
+def _common_run_options[F: Callable[..., Any]](function: F) -> F:
     """Add shared migration-run options to a Click command."""
     function = click.option(
         "--work-dir",
@@ -282,8 +444,9 @@ def discover(
 ) -> None:
     """Discover TSM files for a migration run."""
     normalized_shards = _stringify_shards(shards)
-    run_dir = work_dir / _run_dir_name(
-        backup_dir.name,
+    run_dir = _run_dir(
+        work_dir,
+        backup_dir,
         database,
         retention,
         normalized_shards,
@@ -303,9 +466,52 @@ def discover(
     )
 
 
+@click.command("export")
+@_common_run_options
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Re-export files already marked exported in the manifest.",
+)
+def export_command(
+    backup_dir: Path,
+    database: str,
+    retention: str,
+    shards: tuple[str, ...],
+    work_dir: Path,
+    *,
+    force: bool,
+) -> None:
+    """Export discovered TSM files to line protocol."""
+    normalized_shards = _stringify_shards(shards)
+    run_dir = _run_dir(
+        work_dir,
+        backup_dir,
+        database,
+        retention,
+        normalized_shards,
+    )
+    manifest = _load_manifest(
+        run_dir,
+        backup_dir,
+        database,
+        retention,
+        normalized_shards,
+    )
+    if not manifest.files:
+        _discover_files(run_dir, manifest, backup_dir)
+    exported_count = _export_files(
+        run_dir,
+        manifest,
+        force=force,
+    )
+    click.echo(f"Exported {exported_count} file(s).")
+
+
 @click.group("migrate")
 def migrate() -> None:
     """Migration workflow commands for InfluxDB backups."""
 
 
 migrate.add_command(discover)
+migrate.add_command(export_command)
