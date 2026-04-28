@@ -8,6 +8,7 @@ from .measurements import (
     rename_measurement_command,
     show_measurements,
 )
+from .migration import migrate
 from .tag_to_field import convert_tag_to_field_command
 from .tags import drop_tag, rename_tag, show_tags
 
@@ -27,3 +28,4 @@ influxdb.add_command(show_measurements)
 influxdb.add_command(drop_measurement_command)
 influxdb.add_command(rename_measurement_command)
 influxdb.add_command(convert_tag_to_field_command)
+influxdb.add_command(migrate)
