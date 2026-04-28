@@ -22,7 +22,7 @@ def test_show_measurements_lists_tag_keys_and_field_keys(
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["influxdb", "show-measurements", str(data_file)],
+        ["influxdb", "line-protocol", "show-measurements", str(data_file)],
     )
 
     assert result.exit_code == 0
@@ -45,7 +45,7 @@ def test_show_measurements_handles_escaped_names_and_quoted_field_values(
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["influxdb", "show-measurements", str(data_file)],
+        ["influxdb", "line-protocol", "show-measurements", str(data_file)],
     )
 
     assert result.exit_code == 0
@@ -68,7 +68,13 @@ def test_drop_measurement_rewrites_line_protocol_file(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["influxdb", "drop-measurement", str(data_file), "weather"],
+        [
+            "influxdb",
+            "line-protocol",
+            "drop-measurement",
+            str(data_file),
+            "weather",
+        ],
     )
 
     assert result.exit_code == 0
@@ -91,7 +97,13 @@ def test_drop_measurement_matches_unescaped_measurement_name(
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["influxdb", "drop-measurement", str(data_file), "weather station"],
+        [
+            "influxdb",
+            "line-protocol",
+            "drop-measurement",
+            str(data_file),
+            "weather station",
+        ],
     )
 
     assert result.exit_code == 0
@@ -113,7 +125,14 @@ def test_drop_measurement_verbose_reports_modified_line_count(
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["influxdb", "drop-measurement", "-v", str(data_file), "weather"],
+        [
+            "influxdb",
+            "line-protocol",
+            "drop-measurement",
+            "-v",
+            str(data_file),
+            "weather",
+        ],
     )
 
     assert result.exit_code == 0
@@ -139,6 +158,7 @@ def test_rename_measurement_rewrites_line_protocol_file(
         main,
         [
             "influxdb",
+            "line-protocol",
             "rename-measurement",
             str(data_file),
             "weather",
@@ -171,6 +191,7 @@ def test_rename_measurement_matches_unescaped_measurement_name(
         main,
         [
             "influxdb",
+            "line-protocol",
             "rename-measurement",
             str(data_file),
             "weather station",
@@ -201,6 +222,7 @@ def test_rename_measurement_verbose_reports_modified_line_count(
         main,
         [
             "influxdb",
+            "line-protocol",
             "rename-measurement",
             "-v",
             str(data_file),

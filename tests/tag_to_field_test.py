@@ -22,7 +22,13 @@ def test_convert_tag_to_field_rewrites_line_protocol_file(
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["influxdb", "convert-tag-to-field", str(data_file), "region"],
+        [
+            "influxdb",
+            "line-protocol",
+            "convert-tag-to-field",
+            str(data_file),
+            "region",
+        ],
     )
 
     assert result.exit_code == 0
@@ -47,6 +53,7 @@ def test_convert_tag_to_field_can_be_scoped_to_one_measurement(
         main,
         [
             "influxdb",
+            "line-protocol",
             "convert-tag-to-field",
             "--measurement",
             "weather",
@@ -74,7 +81,13 @@ def test_convert_tag_to_field_escapes_string_field_values(
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["influxdb", "convert-tag-to-field", str(data_file), "note"],
+        [
+            "influxdb",
+            "line-protocol",
+            "convert-tag-to-field",
+            str(data_file),
+            "note",
+        ],
     )
 
     assert result.exit_code == 0
@@ -94,7 +107,13 @@ def test_convert_tag_to_field_aborts_if_field_key_already_exists(
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["influxdb", "convert-tag-to-field", str(data_file), "region"],
+        [
+            "influxdb",
+            "line-protocol",
+            "convert-tag-to-field",
+            str(data_file),
+            "region",
+        ],
     )
 
     assert result.exit_code != 0
@@ -115,7 +134,14 @@ def test_convert_tag_to_field_verbose_reports_modified_line_count(
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["influxdb", "convert-tag-to-field", "-v", str(data_file), "region"],
+        [
+            "influxdb",
+            "line-protocol",
+            "convert-tag-to-field",
+            "-v",
+            str(data_file),
+            "region",
+        ],
     )
 
     assert result.exit_code == 0

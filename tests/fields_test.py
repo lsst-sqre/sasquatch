@@ -20,7 +20,7 @@ def test_show_fields_groups_field_keys_by_measurement(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["influxdb", "show-fields", str(data_file)],
+        ["influxdb", "line-protocol", "show-fields", str(data_file)],
     )
 
     assert result.exit_code == 0
@@ -40,7 +40,7 @@ def test_show_fields_handles_quoted_string_values_with_commas_and_spaces(
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["influxdb", "show-fields", str(data_file)],
+        ["influxdb", "line-protocol", "show-fields", str(data_file)],
     )
 
     assert result.exit_code == 0
@@ -61,7 +61,7 @@ def test_drop_field_rewrites_line_protocol_file(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["influxdb", "drop-field", str(data_file), "summary"],
+        ["influxdb", "line-protocol", "drop-field", str(data_file), "summary"],
     )
 
     assert result.exit_code == 0
@@ -87,7 +87,7 @@ def test_drop_field_drops_lines_with_no_remaining_fields(
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["influxdb", "drop-field", str(data_file), "temp"],
+        ["influxdb", "line-protocol", "drop-field", str(data_file), "temp"],
     )
 
     assert result.exit_code == 0
@@ -111,7 +111,14 @@ def test_drop_field_verbose_reports_modified_line_count(
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["influxdb", "drop-field", "-v", str(data_file), "summary"],
+        [
+            "influxdb",
+            "line-protocol",
+            "drop-field",
+            "-v",
+            str(data_file),
+            "summary",
+        ],
     )
 
     assert result.exit_code == 0
@@ -136,6 +143,7 @@ def test_drop_field_can_be_scoped_to_one_measurement(tmp_path: Path) -> None:
         main,
         [
             "influxdb",
+            "line-protocol",
             "drop-field",
             "--measurement",
             "weather",
@@ -170,6 +178,7 @@ def test_drop_field_verbose_reports_scoped_line_count(
         main,
         [
             "influxdb",
+            "line-protocol",
             "drop-field",
             "-v",
             "-m",
@@ -199,7 +208,14 @@ def test_rename_field_rewrites_line_protocol_file(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["influxdb", "rename-field", str(data_file), "temp", "temperature"],
+        [
+            "influxdb",
+            "line-protocol",
+            "rename-field",
+            str(data_file),
+            "temp",
+            "temperature",
+        ],
     )
 
     assert result.exit_code == 0
@@ -226,6 +242,7 @@ def test_rename_field_can_be_scoped_to_one_measurement(tmp_path: Path) -> None:
         main,
         [
             "influxdb",
+            "line-protocol",
             "rename-field",
             "--measurement",
             "weather",
@@ -259,6 +276,7 @@ def test_rename_field_escapes_new_key_and_reports_verbose_count(
         main,
         [
             "influxdb",
+            "line-protocol",
             "rename-field",
             "-v",
             "-m",

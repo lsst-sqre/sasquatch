@@ -81,6 +81,17 @@ def test_migrate_discover_creates_manifest(tmp_path: Path) -> None:
     assert run_dir.name.count("--") == 2
 
 
+def test_influxdb_help_shows_line_protocol_and_migrate_groups() -> None:
+    """The InfluxDB CLI should separate line protocol and migration tools."""
+    runner = CliRunner()
+    result = runner.invoke(main, ["influxdb", "--help"])
+
+    assert result.exit_code == 0
+    assert "line-protocol" in result.output
+    assert "migrate" in result.output
+    assert "drop-tag" not in result.output
+
+
 def test_migrate_discover_rejects_missing_shard(tmp_path: Path) -> None:
     """Discover should fail when a requested shard is not present."""
     backup_dir = _create_backup_tree(tmp_path)

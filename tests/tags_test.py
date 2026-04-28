@@ -92,7 +92,7 @@ def test_drop_measurement_tag_key_rewrites_line_protocol_file(
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["influxdb", "drop-tag", str(data_file), "region"],
+        ["influxdb", "line-protocol", "drop-tag", str(data_file), "region"],
     )
 
     assert result.exit_code == 0
@@ -118,7 +118,7 @@ def test_drop_measurement_tag_key_matches_unescaped_tag_keys(
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["influxdb", "drop-tag", str(data_file), "tag,key"],
+        ["influxdb", "line-protocol", "drop-tag", str(data_file), "tag,key"],
     )
 
     assert result.exit_code == 0
@@ -142,7 +142,14 @@ def test_drop_measurement_tag_key_verbose_reports_modified_line_count(
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["influxdb", "drop-tag", "-v", str(data_file), "region"],
+        [
+            "influxdb",
+            "line-protocol",
+            "drop-tag",
+            "-v",
+            str(data_file),
+            "region",
+        ],
     )
 
     assert result.exit_code == 0
@@ -169,6 +176,7 @@ def test_drop_measurement_tag_key_can_be_scoped_to_one_measurement(
         main,
         [
             "influxdb",
+            "line-protocol",
             "drop-tag",
             "--measurement",
             "weather",
@@ -203,6 +211,7 @@ def test_drop_measurement_tag_key_verbose_reports_scoped_line_count(
         main,
         [
             "influxdb",
+            "line-protocol",
             "drop-tag",
             "-v",
             "-m",
@@ -234,7 +243,14 @@ def test_rename_tag_rewrites_line_protocol_file(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["influxdb", "rename-tag", str(data_file), "region", "site"],
+        [
+            "influxdb",
+            "line-protocol",
+            "rename-tag",
+            str(data_file),
+            "region",
+            "site",
+        ],
     )
 
     assert result.exit_code == 0
@@ -259,6 +275,7 @@ def test_rename_tag_can_be_scoped_to_one_measurement(tmp_path: Path) -> None:
         main,
         [
             "influxdb",
+            "line-protocol",
             "rename-tag",
             "--measurement",
             "weather",
@@ -292,6 +309,7 @@ def test_rename_tag_escapes_new_tag_key_and_reports_verbose_count(
         main,
         [
             "influxdb",
+            "line-protocol",
             "rename-tag",
             "-v",
             "-m",

@@ -18,14 +18,22 @@ def influxdb() -> None:
     """InfluxDB tools."""
 
 
-influxdb.add_command(show_tags)
-influxdb.add_command(show_fields)
-influxdb.add_command(drop_tag)
-influxdb.add_command(drop_field)
-influxdb.add_command(rename_tag)
-influxdb.add_command(rename_field)
-influxdb.add_command(show_measurements)
-influxdb.add_command(drop_measurement_command)
-influxdb.add_command(rename_measurement_command)
-influxdb.add_command(convert_tag_to_field_command)
+@click.group("line-protocol")
+def line_protocol() -> None:
+    """Line protocol inspection and rewrite tools."""
+
+
+line_protocol.add_command(show_tags)
+line_protocol.add_command(show_fields)
+line_protocol.add_command(drop_tag)
+line_protocol.add_command(drop_field)
+line_protocol.add_command(rename_tag)
+line_protocol.add_command(rename_field)
+line_protocol.add_command(show_measurements)
+line_protocol.add_command(drop_measurement_command)
+line_protocol.add_command(rename_measurement_command)
+line_protocol.add_command(convert_tag_to_field_command)
+
+
+influxdb.add_command(line_protocol)
 influxdb.add_command(migrate)
