@@ -789,7 +789,6 @@ def _export_files(
             manifest.database,
             "-retention",
             manifest.retention,
-            "-lponly",
             "-tsmfile",
             str(extracted_tsm_path),
             "-out",

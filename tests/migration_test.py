@@ -233,6 +233,7 @@ def test_migrate_export_updates_manifest_and_writes_lp(
         assert check is False
         assert text is True
         assert argv[0] == "influx_inspect"
+        assert "-lponly" not in argv
         out_path = Path(argv[argv.index("-out") + 1])
         tsm_path = Path(argv[argv.index("-tsmfile") + 1])
         assert tsm_path.exists()

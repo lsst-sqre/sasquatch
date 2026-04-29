@@ -69,6 +69,12 @@ def _unescape_if_needed(value: str) -> str:
     return _unescape(value) if "\\" in value else value
 
 
+def _is_metadata_line(line: str) -> bool:
+    """Return whether a line is header metadata, not line protocol data."""
+    stripped = line.strip()
+    return not stripped or stripped.startswith(("#", "CREATE "))
+
+
 def _escape_tag_key(value: str) -> str:
     """Escape a tag key for line protocol output."""
     escaped = value.replace("\\", "\\\\")
@@ -169,8 +175,7 @@ def _extract_measurement_and_tag_keys(  # noqa: C901, PLR0912, PLR0915
     line: str,
 ) -> tuple[str, set[str]] | None:
     """Extract a measurement name and tag keys with one pass over the line."""
-    stripped_line = line.lstrip()
-    if not stripped_line or stripped_line.startswith("#"):
+    if _is_metadata_line(line):
         return None
 
     measurement_chars: list[str] = []
@@ -240,8 +245,7 @@ def _extract_measurement_and_field_keys(
 ) -> tuple[str, set[str]] | None:
     """Extract a measurement name and field keys with one pass over fields."""
     content = line.rstrip("\n")
-    stripped_line = content.lstrip()
-    if not stripped_line or stripped_line.startswith("#"):
+    if _is_metadata_line(content):
         return None
 
     record_parts = _split_record_content(content)
