@@ -42,6 +42,15 @@ def _read_manifest(work_dir: Path) -> dict[str, Any]:
     return json.loads(manifests[0].read_text(encoding="utf-8"))
 
 
+def _write_exported_lp(work_dir: Path, content: str) -> Path:
+    """Write exported line protocol content for the current manifest."""
+    manifest = _read_manifest(work_dir)
+    export_lp_path = Path(manifest["files"][0]["export_lp_path"])
+    export_lp_path.parent.mkdir(parents=True, exist_ok=True)
+    export_lp_path.write_text(content, encoding="utf-8")
+    return export_lp_path
+
+
 def test_migrate_discover_creates_manifest(tmp_path: Path) -> None:
     """Discover should create a manifest from shard archives."""
     backup_dir = _create_backup_tree(tmp_path)
@@ -295,3 +304,559 @@ def test_migrate_export_discovers_when_manifest_is_empty(
     manifest = _read_manifest(work_dir)
     assert manifest["status"] == "exported"
     assert len(manifest["files"]) == 1
+
+
+def test_migrate_transform_updates_manifest_and_rewrites_lp(
+    tmp_path: Path,
+) -> None:
+    """Transform should apply a YAML plan and update manifest state."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    plan_path = tmp_path / "plan.yaml"
+    plan_path.write_text(
+        "- op: drop-tag\n  tag: region\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    discover_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+        ],
+    )
+    assert discover_result.exit_code == 0
+
+    export_lp_path = _write_exported_lp(
+        work_dir,
+        "weather,region=us temp=82\n",
+    )
+
+    transform_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "transform",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+            "--plan",
+            str(plan_path),
+        ],
+    )
+
+    assert transform_result.exit_code == 0
+    assert transform_result.output == "Transformed 1 file(s).\n"
+    assert export_lp_path.read_text(encoding="utf-8") == "weather temp=82\n"
+
+    manifest = _read_manifest(work_dir)
+    assert manifest["status"] == "transformed"
+    assert manifest["transform_plan_path"] == str(plan_path)
+    assert manifest["transform_plan_hash"] is not None
+    assert manifest["files"][0]["transformed_at"] is not None
+
+
+def test_migrate_transform_skips_already_transformed_files(
+    tmp_path: Path,
+) -> None:
+    """Transform should skip files already marked transformed."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    plan_path = tmp_path / "plan.yaml"
+    plan_path.write_text(
+        "- op: drop-tag\n  tag: region\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+        ],
+    )
+    export_lp_path = _write_exported_lp(
+        work_dir,
+        "weather,region=us temp=82\n",
+    )
+
+    first_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "transform",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+            "--plan",
+            str(plan_path),
+        ],
+    )
+    assert first_result.exit_code == 0
+
+    export_lp_path.write_text("weather temp=82\n", encoding="utf-8")
+    second_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "transform",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+            "--plan",
+            str(plan_path),
+        ],
+    )
+
+    assert second_result.exit_code == 0
+    assert second_result.output == "Transformed 0 file(s).\n"
+    assert export_lp_path.read_text(encoding="utf-8") == "weather temp=82\n"
+
+
+def test_migrate_transform_reapplies_with_force(tmp_path: Path) -> None:
+    """Transform should rerun a plan when --force is supplied."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    first_plan = tmp_path / "drop-tag.yaml"
+    first_plan.write_text(
+        "- op: drop-tag\n  tag: region\n",
+        encoding="utf-8",
+    )
+    second_plan = tmp_path / "rename-measurement.yaml"
+    second_plan.write_text(
+        "- op: rename-measurement\n  from: weather\n  to: climate\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+        ],
+    )
+    export_lp_path = _write_exported_lp(
+        work_dir,
+        "weather,region=us temp=82\n",
+    )
+
+    first_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "transform",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+            "--plan",
+            str(first_plan),
+        ],
+    )
+    assert first_result.exit_code == 0
+
+    second_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "transform",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+            "--plan",
+            str(second_plan),
+            "--force",
+        ],
+    )
+
+    assert second_result.exit_code == 0
+    assert export_lp_path.read_text(encoding="utf-8") == "climate temp=82\n"
+
+
+def test_migrate_transform_rejects_invalid_plan_extension(
+    tmp_path: Path,
+) -> None:
+    """Transform should require a YAML extension."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text("[]", encoding="utf-8")
+
+    runner = CliRunner()
+    runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+        ],
+    )
+    _write_exported_lp(work_dir, "weather,region=us temp=82\n")
+
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "transform",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+            "--plan",
+            str(plan_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert (
+        "Transform plan must use a .yaml or .yml extension." in result.output
+    )
+
+
+def test_migrate_transform_rejects_unknown_operation(tmp_path: Path) -> None:
+    """Transform should reject unknown operations in the YAML plan."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    plan_path = tmp_path / "plan.yaml"
+    plan_path.write_text(
+        "- op: surprise\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+        ],
+    )
+    _write_exported_lp(work_dir, "weather,region=us temp=82\n")
+
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "transform",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+            "--plan",
+            str(plan_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Unknown transform operation 'surprise'." in result.output
+
+
+def test_migrate_transform_requires_exported_file(tmp_path: Path) -> None:
+    """Transform should fail when the exported LP file is missing."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    plan_path = tmp_path / "plan.yaml"
+    plan_path.write_text(
+        "- op: drop-tag\n  tag: region\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+        ],
+    )
+
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "transform",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+            "--plan",
+            str(plan_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "is missing. Run export first." in result.output
+
+
+def test_migrate_transform_rejects_changed_plan_without_force(
+    tmp_path: Path,
+) -> None:
+    """Transform should reject a changed plan hash unless forced."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    first_plan = tmp_path / "first.yaml"
+    first_plan.write_text(
+        "- op: drop-tag\n  tag: region\n",
+        encoding="utf-8",
+    )
+    second_plan = tmp_path / "second.yaml"
+    second_plan.write_text(
+        "- op: rename-measurement\n  from: weather\n  to: climate\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+        ],
+    )
+    _write_exported_lp(work_dir, "weather,region=us temp=82\n")
+
+    first_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "transform",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+            "--plan",
+            str(first_plan),
+        ],
+    )
+    assert first_result.exit_code == 0
+
+    second_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "transform",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+            "--plan",
+            str(second_plan),
+        ],
+    )
+
+    assert second_result.exit_code != 0
+    assert (
+        "Transform plan changed for an existing run." in second_result.output
+    )
+
+
+def test_migrate_transform_reports_tag_to_field_conflicts(
+    tmp_path: Path,
+) -> None:
+    """Transform should surface tag-to-field conflicts."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    plan_path = tmp_path / "plan.yaml"
+    plan_path.write_text(
+        "- op: convert-tag-to-field\n  tag: region\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+        ],
+    )
+    _write_exported_lp(work_dir, 'weather,region=us region="west"\n')
+
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "transform",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+            "--plan",
+            str(plan_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    manifest = _read_manifest(work_dir)
+    assert manifest["files"][0]["last_error"] is not None

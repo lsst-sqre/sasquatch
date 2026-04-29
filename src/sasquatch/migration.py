@@ -13,6 +13,12 @@ from pathlib import Path
 from typing import Any
 
 import click
+import yaml
+
+from .fields import drop_measurement_field_key, rename_measurement_field_key
+from .measurements import drop_measurement, rename_measurement
+from .tag_to_field import TagToFieldConflictError, convert_tag_to_field
+from .tags import drop_measurement_tag_key, rename_measurement_tag_key
 
 
 def _utc_now() -> str:
@@ -116,6 +122,8 @@ class MigrationManifest:
     created_at: str
     updated_at: str
     status: str
+    transform_plan_path: str | None = None
+    transform_plan_hash: str | None = None
     files: list[MigrationFileRecord] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
@@ -154,6 +162,8 @@ def _load_manifest(
             created_at=data["created_at"],
             updated_at=data["updated_at"],
             status=data["status"],
+            transform_plan_path=data.get("transform_plan_path"),
+            transform_plan_hash=data.get("transform_plan_hash"),
             files=[
                 MigrationFileRecord(**record)
                 for record in data.get("files", [])
@@ -322,6 +332,198 @@ def _write_export_log(
         ),
         encoding="utf-8",
     )
+
+
+def _required_string(operation: dict[str, Any], key: str) -> str:
+    """Return a required string field from a transform operation."""
+    value = operation.get(key)
+    if not isinstance(value, str) or not value:
+        raise click.ClickException(
+            f"Transform operation {operation.get('op')!r} requires {key!r}."
+        )
+    return value
+
+
+def _operation_keys(op_name: str) -> list[str]:
+    """Return required keys for one transform operation."""
+    required_keys = {
+        "drop-tag": ["tag"],
+        "rename-tag": ["from", "to"],
+        "drop-field": ["field"],
+        "rename-field": ["from", "to"],
+        "drop-measurement": ["measurement"],
+        "rename-measurement": ["from", "to"],
+        "convert-tag-to-field": ["tag"],
+    }
+    try:
+        return required_keys[op_name]
+    except KeyError as exc:
+        raise click.ClickException(
+            f"Unknown transform operation {op_name!r}."
+        ) from exc
+
+
+def _normalize_operation(operation: dict[str, Any]) -> dict[str, Any]:
+    """Normalize one transform operation for execution and hashing."""
+    op_name = operation.get("op")
+    if not isinstance(op_name, str):
+        raise click.ClickException(
+            "Each transform entry must define string 'op'."
+        )
+
+    measurement = operation.get("measurement")
+    if measurement is not None and not isinstance(measurement, str):
+        raise click.ClickException("Optional 'measurement' must be a string.")
+
+    normalized: dict[str, Any] = {"op": op_name}
+    if measurement is not None:
+        normalized["measurement"] = measurement
+
+    for key in _operation_keys(op_name):
+        normalized[key] = _required_string(operation, key)
+
+    return normalized
+
+
+def _load_transform_plan(plan_path: Path) -> tuple[list[dict[str, Any]], str]:
+    """Load and normalize a YAML transform plan."""
+    if plan_path.suffix.lower() not in {".yaml", ".yml"}:
+        raise click.UsageError(
+            "Transform plan must use a .yaml or .yml extension."
+        )
+
+    try:
+        raw_plan = yaml.safe_load(plan_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise click.ClickException(
+            f"Failed to parse YAML transform plan {plan_path}."
+        ) from exc
+
+    if not isinstance(raw_plan, list):
+        raise click.ClickException(
+            "Transform plan must be a list of operations."
+        )
+
+    normalized: list[dict[str, Any]] = []
+    for operation in raw_plan:
+        if not isinstance(operation, dict):
+            raise click.ClickException(
+                "Each transform plan entry must be an object."
+            )
+        normalized.append(_normalize_operation(operation))
+
+    plan_hash = hashlib.sha256(
+        json.dumps(normalized, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    return normalized, plan_hash
+
+
+def _apply_operation(file_path: Path, operation: dict[str, Any]) -> None:
+    """Apply one normalized transform operation to an LP file."""
+    op_name = operation["op"]
+    measurement = operation.get("measurement")
+
+    try:
+        if op_name == "drop-tag":
+            drop_measurement_tag_key(
+                file_path,
+                operation["tag"],
+                measurement=measurement,
+            )
+        elif op_name == "rename-tag":
+            rename_measurement_tag_key(
+                file_path,
+                operation["from"],
+                operation["to"],
+                measurement=measurement,
+            )
+        elif op_name == "drop-field":
+            drop_measurement_field_key(
+                file_path,
+                operation["field"],
+                measurement=measurement,
+            )
+        elif op_name == "rename-field":
+            rename_measurement_field_key(
+                file_path,
+                operation["from"],
+                operation["to"],
+                measurement=measurement,
+            )
+        elif op_name == "drop-measurement":
+            drop_measurement(file_path, operation["measurement"])
+        elif op_name == "rename-measurement":
+            rename_measurement(
+                file_path,
+                operation["from"],
+                operation["to"],
+            )
+        elif op_name == "convert-tag-to-field":
+            convert_tag_to_field(
+                file_path,
+                operation["tag"],
+                measurement=measurement,
+            )
+        else:  # pragma: no cover
+            raise click.ClickException(
+                f"Unsupported transform operation {op_name!r}."
+            )
+    except TagToFieldConflictError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+def _transform_files(
+    run_dir: Path,
+    manifest: MigrationManifest,
+    plan_path: Path,
+    *,
+    force: bool,
+) -> int:
+    """Apply a transform plan to exported line protocol files."""
+    if not manifest.files:
+        raise click.ClickException(
+            "No discovered files found in the manifest. Run export first."
+        )
+
+    normalized_plan, plan_hash = _load_transform_plan(plan_path)
+    if (
+        manifest.transform_plan_hash is not None
+        and manifest.transform_plan_hash != plan_hash
+        and any(record.transformed_at is not None for record in manifest.files)
+        and not force
+    ):
+        raise click.ClickException(
+            "Transform plan changed for an existing run. "
+            "Use --force to reapply it."
+        )
+
+    transformed_count = 0
+    for record in manifest.files:
+        export_lp_path = Path(record.export_lp_path)
+        if not export_lp_path.exists():
+            raise click.ClickException(
+                f"Exported file {export_lp_path} is missing. Run export first."
+            )
+        if record.transformed_at is not None and not force:
+            continue
+
+        try:
+            for operation in normalized_plan:
+                _apply_operation(export_lp_path, operation)
+        except click.ClickException as exc:
+            record.last_error = str(exc)
+            _save_manifest(run_dir, manifest)
+            raise
+
+        record.transformed_at = _utc_now()
+        record.last_error = None
+        transformed_count += 1
+
+    manifest.transform_plan_path = str(plan_path)
+    manifest.transform_plan_hash = plan_hash
+    manifest.status = "transformed"
+    _save_manifest(run_dir, manifest)
+    return transformed_count
 
 
 def _export_files(
@@ -508,6 +710,54 @@ def export_command(
     click.echo(f"Exported {exported_count} file(s).")
 
 
+@click.command("transform")
+@_common_run_options
+@click.option(
+    "--plan",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="YAML file describing ordered transform operations.",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Reapply the transform plan to files already marked transformed.",
+)
+def transform_command(
+    backup_dir: Path,
+    database: str,
+    retention: str,
+    shards: tuple[str, ...],
+    work_dir: Path,
+    plan: Path,
+    *,
+    force: bool,
+) -> None:
+    """Transform exported line protocol files in place."""
+    normalized_shards = _stringify_shards(shards)
+    run_dir = _run_dir(
+        work_dir,
+        backup_dir,
+        database,
+        retention,
+        normalized_shards,
+    )
+    manifest = _load_manifest(
+        run_dir,
+        backup_dir,
+        database,
+        retention,
+        normalized_shards,
+    )
+    transformed_count = _transform_files(
+        run_dir,
+        manifest,
+        plan,
+        force=force,
+    )
+    click.echo(f"Transformed {transformed_count} file(s).")
+
+
 @click.group("migrate")
 def migrate() -> None:
     """Migration workflow commands for InfluxDB backups."""
@@ -515,3 +765,4 @@ def migrate() -> None:
 
 migrate.add_command(discover)
 migrate.add_command(export_command)
+migrate.add_command(transform_command)
