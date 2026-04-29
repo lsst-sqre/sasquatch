@@ -13,7 +13,8 @@ linkcheck_ignore = [
     r"https://usdf-rsp-dev.slac.stanford.edu/.*",
     r"https://usdf-rsp-int.slac.stanford.edu/.*",
     r"https://usdf-rsp.slac.stanford.edu/.*",
+    r"https://strimzi.io/.*",
 ]
 
-linkcheck_rate_limit_timeout = 300
-linkcheck_retries = 1
+linkcheck_rate_limit_timeout = 30
+linkcheck_retries = 3
