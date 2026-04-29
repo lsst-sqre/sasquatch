@@ -1,3 +1,10 @@
+# INFLUXDB EXPORT: 1677-09-21T00:12:43Z - 2262-04-11T23:47:16Z
+# DDL
+CREATE DATABASE "target.metrics"
+# DML
+# CONTEXT-DATABASE:target.metrics
+# CONTEXT-RETENTION-POLICY:forever
+# writing tsm data
 cpu,host=server01,region=us-west,env=prod usage_user=12.5,usage_system=4.2 1713571200000000000
 cpu,host=server02,region=us-east,env=staging usage_user=8.1,usage_system=2.9 1713571205000000000
 memory,host=server01,region=us-west,env=prod used=734003200i,free=2147483648i 1713571210000000000

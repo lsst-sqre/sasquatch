@@ -9,6 +9,7 @@ from .line_protocol import (
     _escape_tag_key,
     _extract_measurement_and_field_keys,
     _extract_measurement_from_series_key,
+    _is_metadata_line,
     _iter_field_ranges,
     _rewrite_file_in_place,
     _split_record_content,
@@ -25,8 +26,7 @@ def _drop_field_from_line(
     """Drop a field key from a single line of InfluxDB line protocol."""
     line_ending = "\n" if line.endswith("\n") else ""
     content = line.removesuffix(line_ending)
-    stripped_line = content.strip()
-    if not stripped_line or stripped_line.startswith("#"):
+    if _is_metadata_line(content):
         return line
 
     record_parts = _split_record_content(content)
@@ -70,8 +70,7 @@ def _rename_field_in_line(
     """Rename a field key in a single line of InfluxDB line protocol."""
     line_ending = "\n" if line.endswith("\n") else ""
     content = line.removesuffix(line_ending)
-    stripped_line = content.strip()
-    if not stripped_line or stripped_line.startswith("#"):
+    if _is_metadata_line(content):
         return line
 
     record_parts = _split_record_content(content)
