@@ -106,6 +106,7 @@ class MigrationFileRecord:
     imported_at: str | None = None
     extracted_tsm_path: str | None = None
     export_log_path: str | None = None
+    import_log_path: str | None = None
     last_error: str | None = None
 
 
@@ -334,6 +335,111 @@ def _write_export_log(
     )
 
 
+def _write_import_log(
+    log_path: Path,
+    argv: list[str],
+    result: subprocess.CompletedProcess[str],
+) -> None:
+    """Write an import command log."""
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(
+        "\n".join(
+            [
+                f"argv: {' '.join(argv)}",
+                f"returncode: {result.returncode}",
+                "",
+                "stdout:",
+                result.stdout,
+                "",
+                "stderr:",
+                result.stderr,
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def _context_header_line(prefix: str, value: str) -> str:
+    """Build one DML context header line."""
+    return f"# {prefix}: {value}\n"
+
+
+def _find_import_context_indexes(
+    lines: list[str],
+) -> tuple[int | None, int | None, int | None, int | None]:
+    """Locate DML/context headers and the first data line."""
+    dml_index: int | None = None
+    database_index: int | None = None
+    retention_index: int | None = None
+    first_data_index: int | None = None
+
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            if stripped == "# DML":
+                dml_index = index
+            elif stripped.startswith("# CONTEXT-DATABASE:"):
+                database_index = index
+            elif stripped.startswith("# CONTEXT-RETENTION-POLICY:"):
+                retention_index = index
+            continue
+        if stripped:
+            first_data_index = index
+            break
+
+    return dml_index, database_index, retention_index, first_data_index
+
+
+def _replace_context_header(
+    lines: list[str],
+    index: int | None,
+    expected: str,
+) -> bool:
+    """Replace one existing header line if it differs."""
+    if index is None or lines[index] == expected:
+        return False
+    lines[index] = expected
+    return True
+
+
+def _insert_missing_context_headers(
+    lines: list[str],
+    *,
+    dml_index: int | None,
+    database_index: int | None,
+    retention_index: int | None,
+    first_data_index: int | None,
+    database: str,
+    retention: str,
+) -> bool:
+    """Insert any missing DML/context headers before the first data line."""
+    if (
+        dml_index is not None
+        and database_index is not None
+        and retention_index is not None
+    ):
+        return False
+
+    insert_at = (
+        first_data_index if first_data_index is not None else len(lines)
+    )
+    header_lines: list[str] = []
+    if dml_index is None:
+        header_lines.append("# DML\n")
+    if database_index is None:
+        header_lines.append(_context_header_line("CONTEXT-DATABASE", database))
+    if retention_index is None:
+        header_lines.append(
+            _context_header_line(
+                "CONTEXT-RETENTION-POLICY",
+                retention,
+            )
+        )
+    lines[insert_at:insert_at] = header_lines
+    return True
+
+
 def _required_string(operation: dict[str, Any], key: str) -> str:
     """Return a required string field from a transform operation."""
     value = operation.get(key)
@@ -526,6 +632,121 @@ def _transform_files(
     return transformed_count
 
 
+def _rewrite_import_context(
+    file_path: Path,
+    *,
+    database: str,
+    retention: str,
+) -> str | None:
+    """Rewrite or add import context headers in place."""
+    lines = file_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    (
+        dml_index,
+        database_index,
+        retention_index,
+        first_data_index,
+    ) = _find_import_context_indexes(lines)
+
+    modified = _replace_context_header(
+        lines,
+        database_index,
+        _context_header_line("CONTEXT-DATABASE", database),
+    )
+    modified = (
+        _replace_context_header(
+            lines,
+            retention_index,
+            _context_header_line("CONTEXT-RETENTION-POLICY", retention),
+        )
+        or modified
+    )
+    added = _insert_missing_context_headers(
+        lines,
+        dml_index=dml_index,
+        database_index=database_index,
+        retention_index=retention_index,
+        first_data_index=first_data_index,
+        database=database,
+        retention=retention,
+    )
+
+    if added or modified:
+        file_path.write_text("".join(lines), encoding="utf-8")
+
+    if added:
+        return "added"
+    if modified:
+        return "modified"
+    return None
+
+
+def _build_import_argv(
+    *,
+    file_path: Path,
+    host: str,
+    port: int,
+    username: str | None,
+    password: str | None,
+    precision: str,
+    pps: int,
+    compressed: bool,
+    ssl: bool,
+    unsafe_ssl: bool,
+) -> list[str]:
+    """Build the influx CLI argv for one file import."""
+    argv = [
+        "influx",
+        "-host",
+        host,
+        "-port",
+        str(port),
+        "-import",
+        "-path",
+        str(file_path),
+        "-precision",
+        precision,
+    ]
+    if username is not None:
+        argv.extend(["-username", username])
+    if password is not None:
+        argv.extend(["-password", password])
+    if pps:
+        argv.extend(["-pps", str(pps)])
+    if compressed:
+        argv.append("-compressed")
+    if ssl:
+        argv.append("-ssl")
+    if unsafe_ssl:
+        argv.append("-unsafeSsl")
+    return argv
+
+
+def _emit_import_context_message(
+    status: str | None,
+    *,
+    file_path: Path,
+    database: str,
+    retention: str,
+) -> None:
+    """Print a per-file header update message when needed."""
+    if status == "added":
+        click.echo(
+            f"Added import headers to {file_path} for "
+            f"database={database}, retention={retention}."
+        )
+    elif status == "modified":
+        click.echo(
+            f"Updated import headers in {file_path} to "
+            f"database={database}, retention={retention}."
+        )
+
+
+def _import_log_path(run_dir: Path, record: MigrationFileRecord) -> Path:
+    """Return the import log path for one file record."""
+    file_stem = Path(record.export_lp_path).stem
+    return run_dir / "logs" / "import" / f"{record.shard_id}-{file_stem}.log"
+
+
 def _export_files(
     run_dir: Path,
     manifest: MigrationManifest,
@@ -609,6 +830,91 @@ def _export_files(
     manifest.status = "exported"
     _save_manifest(run_dir, manifest)
     return exported_count
+
+
+def _import_files(
+    run_dir: Path,
+    manifest: MigrationManifest,
+    *,
+    target_database: str,
+    target_retention: str,
+    host: str,
+    port: int,
+    username: str | None,
+    password: str | None,
+    precision: str,
+    pps: int,
+    compressed: bool,
+    ssl: bool,
+    unsafe_ssl: bool,
+    force: bool,
+) -> int:
+    """Import transformed line protocol files."""
+    if not manifest.files:
+        raise click.ClickException(
+            "No discovered files found in the manifest. Run transform first."
+        )
+
+    imported_count = 0
+    for record in manifest.files:
+        file_path = Path(record.export_lp_path)
+        if not file_path.exists():
+            raise click.ClickException(
+                f"Line protocol file {file_path} is missing."
+            )
+        if record.transformed_at is None:
+            raise click.ClickException(
+                f"File {file_path} has not been transformed. "
+                "Run transform first."
+            )
+        if record.imported_at is not None and not force:
+            continue
+
+        rewrite_status = _rewrite_import_context(
+            file_path,
+            database=target_database,
+            retention=target_retention,
+        )
+        _emit_import_context_message(
+            rewrite_status,
+            file_path=file_path,
+            database=target_database,
+            retention=target_retention,
+        )
+        argv = _build_import_argv(
+            file_path=file_path,
+            host=host,
+            port=port,
+            username=username,
+            password=password,
+            precision=precision,
+            pps=pps,
+            compressed=compressed,
+            ssl=ssl,
+            unsafe_ssl=unsafe_ssl,
+        )
+
+        result = _run_external_command(argv)
+        log_path = _import_log_path(run_dir, record)
+        _write_import_log(log_path, argv, result)
+        record.import_log_path = str(log_path)
+
+        if result.returncode != 0:
+            record.last_error = (
+                result.stderr.strip() or "Import command failed."
+            )
+            _save_manifest(run_dir, manifest)
+            raise click.ClickException(
+                f"Failed to import {file_path}: {record.last_error}"
+            )
+
+        record.imported_at = _utc_now()
+        record.last_error = None
+        imported_count += 1
+
+    manifest.status = "imported"
+    _save_manifest(run_dir, manifest)
+    return imported_count
 
 
 def _common_run_options[F: Callable[..., Any]](function: F) -> F:
@@ -758,6 +1064,104 @@ def transform_command(
     click.echo(f"Transformed {transformed_count} file(s).")
 
 
+@click.command("import")
+@_common_run_options
+@click.option("--host", required=True, help="InfluxDB host name.")
+@click.option("--port", type=int, default=8086, show_default=True)
+@click.option("--username", default=None, help="InfluxDB username.")
+@click.option("--password", default=None, help="InfluxDB password.")
+@click.option(
+    "--target-database",
+    default=None,
+    help=(
+        "Destination database for the import. Defaults to the source "
+        "database recorded in the manifest."
+    ),
+)
+@click.option(
+    "--target-retention",
+    default=None,
+    help=(
+        "Destination retention policy for the import. Defaults to the "
+        "source retention recorded in the manifest."
+    ),
+)
+@click.option(
+    "--precision",
+    default="ns",
+    show_default=True,
+    type=click.Choice(["h", "m", "s", "ms", "u", "ns"]),
+)
+@click.option("--pps", type=int, default=0, show_default=True)
+@click.option("--compressed", is_flag=True)
+@click.option("--ssl", is_flag=True, help="Use HTTPS for the import request.")
+@click.option(
+    "--unsafe-ssl",
+    is_flag=True,
+    help="Disable SSL certificate verification.",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Re-import files already marked imported in the manifest.",
+)
+def import_command(
+    backup_dir: Path,
+    database: str,
+    retention: str,
+    shards: tuple[str, ...],
+    work_dir: Path,
+    host: str,
+    port: int,
+    username: str | None,
+    password: str | None,
+    target_database: str | None,
+    target_retention: str | None,
+    precision: str,
+    pps: int,
+    *,
+    compressed: bool,
+    ssl: bool,
+    unsafe_ssl: bool,
+    force: bool,
+) -> None:
+    """Import transformed line protocol files into InfluxDB."""
+    normalized_shards = _stringify_shards(shards)
+    run_dir = _run_dir(
+        work_dir,
+        backup_dir,
+        database,
+        retention,
+        normalized_shards,
+    )
+    manifest = _load_manifest(
+        run_dir,
+        backup_dir,
+        database,
+        retention,
+        normalized_shards,
+    )
+    resolved_target_database = target_database or manifest.database
+    resolved_target_retention = target_retention or manifest.retention
+    imported_count = _import_files(
+        run_dir,
+        manifest,
+        target_database=resolved_target_database,
+        target_retention=resolved_target_retention,
+        host=host,
+        port=port,
+        username=username,
+        password=password,
+        precision=precision,
+        pps=pps,
+        compressed=compressed,
+        ssl=ssl,
+        unsafe_ssl=unsafe_ssl,
+        force=force,
+    )
+    click.echo(f"Imported {imported_count} file(s).")
+
+
 @click.group("migrate")
 def migrate() -> None:
     """Migration workflow commands for InfluxDB backups."""
@@ -766,3 +1170,4 @@ def migrate() -> None:
 migrate.add_command(discover)
 migrate.add_command(export_command)
 migrate.add_command(transform_command)
+migrate.add_command(import_command)

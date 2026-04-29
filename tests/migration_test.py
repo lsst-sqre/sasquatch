@@ -51,6 +51,45 @@ def _write_exported_lp(work_dir: Path, content: str) -> Path:
     return export_lp_path
 
 
+def _mark_transformed(work_dir: Path) -> None:
+    """Mark the manifest file as transformed for import tests."""
+    manifest_path = next(work_dir.rglob("migration-manifest.json"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["status"] = "transformed"
+    manifest["files"][0]["transformed_at"] = "2026-04-29T00:00:00+00:00"
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _discover_source_run(
+    runner: CliRunner,
+    backup_dir: Path,
+    work_dir: Path,
+) -> None:
+    """Create a manifest using the source database and retention."""
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+        ],
+    )
+    assert result.exit_code == 0
+
+
 def test_migrate_discover_creates_manifest(tmp_path: Path) -> None:
     """Discover should create a manifest from shard archives."""
     backup_dir = _create_backup_tree(tmp_path)
@@ -860,3 +899,325 @@ def test_migrate_transform_reports_tag_to_field_conflicts(
     assert result.exit_code != 0
     manifest = _read_manifest(work_dir)
     assert manifest["files"][0]["last_error"] is not None
+
+
+def test_migrate_import_updates_manifest_and_rewrites_headers(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Import should rewrite headers and update import state."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    runner = CliRunner()
+    _discover_source_run(runner, backup_dir, work_dir)
+    file_path = _write_exported_lp(
+        work_dir,
+        "# DML\n"
+        "# CONTEXT-DATABASE: lsst.square.metrics\n"
+        "# CONTEXT-RETENTION-POLICY: autogen\n"
+        "weather temp=82\n",
+    )
+    _mark_transformed(work_dir)
+
+    def fake_run(
+        argv: list[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        assert argv[0] == "influx"
+        assert "-host" in argv
+        assert "-import" in argv
+        return subprocess.CompletedProcess(argv, 0, "imported", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "import",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+            "--host",
+            "influxdb.example.org",
+            "--target-database",
+            "target.metrics",
+            "--target-retention",
+            "forever",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Updated import headers in" in result.output
+    assert "Imported 1 file(s)." in result.output
+    content = file_path.read_text(encoding="utf-8")
+    assert "# CONTEXT-DATABASE: target.metrics\n" in content
+    assert "# CONTEXT-RETENTION-POLICY: forever\n" in content
+    manifest = _read_manifest(work_dir)
+    assert manifest["status"] == "imported"
+    assert manifest["files"][0]["imported_at"] is not None
+    assert manifest["files"][0]["import_log_path"] is not None
+
+
+def test_migrate_import_adds_missing_headers_and_reports_it(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Import should add missing DML headers."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    runner = CliRunner()
+    _discover_source_run(runner, backup_dir, work_dir)
+    file_path = _write_exported_lp(work_dir, "weather temp=82\n")
+    _mark_transformed(work_dir)
+
+    def fake_run(
+        argv: list[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(argv, 0, "imported", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "import",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+            "--host",
+            "influxdb.example.org",
+            "--target-database",
+            "target.metrics",
+            "--target-retention",
+            "forever",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Added import headers to" in result.output
+    content = file_path.read_text(encoding="utf-8")
+    assert content.startswith(
+        "# DML\n"
+        "# CONTEXT-DATABASE: target.metrics\n"
+        "# CONTEXT-RETENTION-POLICY: forever\n"
+    )
+
+
+def test_migrate_import_is_quiet_when_headers_already_match(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Import should not print per-file header output when unchanged."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    runner = CliRunner()
+    _discover_source_run(runner, backup_dir, work_dir)
+    _write_exported_lp(
+        work_dir,
+        "# DML\n"
+        "# CONTEXT-DATABASE: target.metrics\n"
+        "# CONTEXT-RETENTION-POLICY: forever\n"
+        "weather temp=82\n",
+    )
+    _mark_transformed(work_dir)
+
+    def fake_run(
+        argv: list[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(argv, 0, "imported", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "import",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+            "--host",
+            "influxdb.example.org",
+            "--target-database",
+            "target.metrics",
+            "--target-retention",
+            "forever",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Imported 1 file(s).\n"
+
+
+def test_migrate_import_skips_already_imported_without_force(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Import should skip files already marked imported."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    runner = CliRunner()
+    _discover_source_run(runner, backup_dir, work_dir)
+    _write_exported_lp(work_dir, "weather temp=82\n")
+    _mark_transformed(work_dir)
+    manifest_path = next(work_dir.rglob("migration-manifest.json"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"][0]["imported_at"] = "2026-04-29T00:00:00+00:00"
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    calls = 0
+
+    def fake_run(
+        argv: list[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        nonlocal calls
+        calls += 1
+        return subprocess.CompletedProcess(argv, 0, "imported", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "import",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+            "--host",
+            "influxdb.example.org",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Imported 0 file(s).\n"
+    assert calls == 0
+
+
+def test_migrate_import_requires_transformed_file(tmp_path: Path) -> None:
+    """Import should fail when transformed_at is missing."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    runner = CliRunner()
+    _discover_source_run(runner, backup_dir, work_dir)
+    _write_exported_lp(work_dir, "weather temp=82\n")
+
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "import",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+            "--host",
+            "influxdb.example.org",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "has not been transformed. Run transform first." in result.output
+
+
+def test_migrate_import_records_subprocess_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Import should record CLI failures in the manifest."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    runner = CliRunner()
+    _discover_source_run(runner, backup_dir, work_dir)
+    _write_exported_lp(work_dir, "weather temp=82\n")
+    _mark_transformed(work_dir)
+
+    def fake_run(
+        argv: list[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(argv, 1, "", "boom")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "import",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+            "--host",
+            "influxdb.example.org",
+        ],
+    )
+
+    assert result.exit_code != 0
+    manifest = _read_manifest(work_dir)
+    assert manifest["files"][0]["last_error"] == "boom"
