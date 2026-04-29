@@ -9,6 +9,7 @@ import click
 from .line_protocol import (
     _extract_measurement_from_series_key,
     _find_unescaped_separator,
+    _is_metadata_line,
     _iter_field_ranges,
     _iter_tag_ranges,
     _rewrite_file_in_place,
@@ -109,8 +110,7 @@ def _convert_tag_to_field_in_line(
     """Convert one tag key into a string field on a single line."""
     line_ending = "\n" if line.endswith("\n") else ""
     content = line.removesuffix(line_ending)
-    stripped_line = content.strip()
-    if not stripped_line or stripped_line.startswith("#"):
+    if _is_metadata_line(content):
         return line
 
     record_parts = _split_record_content(content)

@@ -11,6 +11,7 @@ from .line_protocol import (
     _extract_measurement_and_tag_keys,
     _extract_measurement_from_series_key,
     _find_unescaped_separator,
+    _is_metadata_line,
     _rewrite_file_in_place,
 )
 
@@ -19,8 +20,7 @@ def _drop_measurement_from_line(line: str, measurement_to_drop: str) -> str:
     """Drop a measurement from a single line of InfluxDB line protocol."""
     line_ending = "\n" if line.endswith("\n") else ""
     content = line.removesuffix(line_ending)
-    stripped_line = content.strip()
-    if not stripped_line or stripped_line.startswith("#"):
+    if _is_metadata_line(content):
         return line
 
     field_separator = _find_unescaped_separator(content, " ")
@@ -43,8 +43,7 @@ def _rename_measurement_in_line(
     """Rename a measurement in a single line of InfluxDB line protocol."""
     line_ending = "\n" if line.endswith("\n") else ""
     content = line.removesuffix(line_ending)
-    stripped_line = content.strip()
-    if not stripped_line or stripped_line.startswith("#"):
+    if _is_metadata_line(content):
         return line
 
     field_separator = _find_unescaped_separator(content, " ")

@@ -56,6 +56,20 @@ ADD . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-default-groups --compile-bytecode --no-editable
 
+FROM base-image AS influx-tools-image
+
+# Download the InfluxDB OSS tooling needed by migration commands.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
+    apt-get -y install --no-install-recommends curl ca-certificates && \
+    mkdir influxdb-1.12.3 && \
+    curl -LO "https://dl.influxdata.com/influxdb/releases/v1.12.3/influxdb-1.12.3_linux_amd64.tar.gz" && \
+    tar xf influxdb-1.12.3_linux_amd64.tar.gz -C influxdb-1.12.3 && \
+    mv "$(find influxdb-1.12.3 -type f -name influx | head -n 1)" /usr/local/bin/ && \
+    mv "$(find influxdb-1.12.3 -type f -name influx_inspect | head -n 1)" /usr/local/bin/ && \
+    rm -rf influxdb-1.12.3 influxdb-1.12.3_linux_amd64.tar.gz /var/lib/apt/lists/*
+
 FROM base-image AS runtime-image
 
 # Create a non-root user.
@@ -63,6 +77,10 @@ RUN useradd --create-home appuser
 
 # Copy the virtualenv.
 COPY --from=install-image /app/.venv /app/.venv
+
+# Copy the InfluxDB inspection tool used by migration commands.
+COPY --from=influx-tools-image /usr/local/bin/influx /usr/local/bin/influx
+COPY --from=influx-tools-image /usr/local/bin/influx_inspect /usr/local/bin/influx_inspect
 
 # Switch to the non-root user.
 USER appuser
