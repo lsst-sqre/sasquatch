@@ -184,7 +184,7 @@ def _mark_imported(work_dir: Path) -> None:
 def _discover_source_run(
     runner: CliRunner,
     backup_dir: Path,
-    work_dir: Path,
+    run_dir: Path,
 ) -> None:
     """Create a manifest using the source database and retention."""
     result = runner.invoke(
@@ -201,8 +201,8 @@ def _discover_source_run(
             "autogen",
             "--shard",
             "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
         ],
     )
     assert result.exit_code == 0
@@ -211,7 +211,7 @@ def _discover_source_run(
 def test_migrate_discover_creates_manifest(tmp_path: Path) -> None:
     """Discover should create a manifest from shard archives."""
     backup_dir = _create_backup_tree(tmp_path)
-    work_dir = tmp_path / "work"
+    run_dir = tmp_path / "run"
 
     runner = CliRunner()
     result = runner.invoke(
@@ -228,26 +228,52 @@ def test_migrate_discover_creates_manifest(tmp_path: Path) -> None:
             "autogen",
             "--shard",
             "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
         ],
     )
 
     assert result.exit_code == 0
     assert result.output == "Discovered 1 TSM file(s) in 1 shard(s).\n"
 
-    manifest = _read_manifest(work_dir)
+    manifest = _read_manifest(run_dir)
     assert manifest["database"] == "lsst.square.metrics"
     assert manifest["retention"] == "autogen"
     assert manifest["shards"] == ["975"]
     assert manifest["status"] == "discovered"
     assert len(manifest["files"]) == 1
-    assert _read_manifest(
-        work_dir
-    )  # manifest exists under the shortened run dir
-    run_dir = next(work_dir.iterdir())
-    assert run_dir.name.startswith("lsst.square.metrics--autogen--")
-    assert run_dir.name.count("--") == 2
+    assert manifest["run_id"]
+    assert (run_dir / "migration-manifest.json").exists()
+
+
+def test_migrate_discover_rejects_existing_run_dir(tmp_path: Path) -> None:
+    """Discover should fail when the requested run directory exists."""
+    backup_dir = _create_backup_tree(tmp_path)
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--run-dir",
+            str(run_dir),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert f"Run directory {run_dir} already exists." in result.output
 
 
 def test_influxdb_help_shows_line_protocol_and_migrate_groups() -> None:
@@ -264,7 +290,7 @@ def test_influxdb_help_shows_line_protocol_and_migrate_groups() -> None:
 def test_migrate_discover_rejects_missing_shard(tmp_path: Path) -> None:
     """Discover should fail when a requested shard is not present."""
     backup_dir = _create_backup_tree(tmp_path)
-    work_dir = tmp_path / "work"
+    run_dir = tmp_path / "run"
 
     runner = CliRunner()
     result = runner.invoke(
@@ -281,8 +307,8 @@ def test_migrate_discover_rejects_missing_shard(tmp_path: Path) -> None:
             "autogen",
             "--shard",
             "998",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
         ],
     )
 
@@ -295,7 +321,7 @@ def test_migrate_discover_all_shards_uses_backup_manifest(
 ) -> None:
     """Discover all-shards should use the backup manifest as its source."""
     backup_dir = _create_backup_tree(tmp_path)
-    work_dir = tmp_path / "work"
+    run_dir = tmp_path / "run"
 
     runner = CliRunner()
     result = runner.invoke(
@@ -311,14 +337,14 @@ def test_migrate_discover_all_shards_uses_backup_manifest(
             "--retention",
             "autogen",
             "--all-shards",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
         ],
     )
 
     assert result.exit_code == 0
     assert result.output == "Discovered 2 TSM file(s) in 2 shard(s).\n"
-    manifest = _read_manifest(work_dir)
+    manifest = _read_manifest(run_dir)
     assert manifest["all_shards"] is True
     assert manifest["shards"] == ["975", "986"]
     assert {record["shard_id"] for record in manifest["files"]} == {
@@ -332,7 +358,7 @@ def test_migrate_discover_all_shards_requires_backup_manifest(
 ) -> None:
     """Discover all-shards should fail without a backup manifest."""
     backup_dir = _create_backup_tree_without_manifest(tmp_path)
-    work_dir = tmp_path / "work"
+    run_dir = tmp_path / "run"
 
     runner = CliRunner()
     result = runner.invoke(
@@ -348,8 +374,8 @@ def test_migrate_discover_all_shards_requires_backup_manifest(
             "--retention",
             "autogen",
             "--all-shards",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
         ],
     )
 
@@ -364,7 +390,7 @@ def test_migrate_discover_all_shards_rejects_multiple_manifests(
     backup_dir = _create_backup_tree(tmp_path)
     extra_manifest = backup_dir / "extra.manifest"
     extra_manifest.write_text('{"files": []}\n', encoding="utf-8")
-    work_dir = tmp_path / "work"
+    run_dir = tmp_path / "run"
 
     runner = CliRunner()
     result = runner.invoke(
@@ -380,8 +406,8 @@ def test_migrate_discover_all_shards_rejects_multiple_manifests(
             "--retention",
             "autogen",
             "--all-shards",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
         ],
     )
 
@@ -394,7 +420,7 @@ def test_migrate_discover_all_shards_rejects_no_matching_manifest_entries(
 ) -> None:
     """Discover all-shards should fail when the manifest has no matches."""
     backup_dir = _create_backup_tree(tmp_path)
-    work_dir = tmp_path / "work"
+    run_dir = tmp_path / "run"
 
     runner = CliRunner()
     result = runner.invoke(
@@ -410,8 +436,8 @@ def test_migrate_discover_all_shards_rejects_no_matching_manifest_entries(
             "--retention",
             "autogen",
             "--all-shards",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
         ],
     )
 
@@ -425,7 +451,7 @@ def test_migrate_discover_all_shards_rejects_missing_archive(
     """Discover all-shards should fail when a manifest archive is missing."""
     backup_dir = _create_backup_tree(tmp_path)
     (backup_dir / "20260424T050008Z.s986.tar.gz").unlink()
-    work_dir = tmp_path / "work"
+    run_dir = tmp_path / "run"
 
     runner = CliRunner()
     result = runner.invoke(
@@ -441,8 +467,8 @@ def test_migrate_discover_all_shards_rejects_missing_archive(
             "--retention",
             "autogen",
             "--all-shards",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
         ],
     )
 
@@ -467,7 +493,7 @@ def test_migrate_discover_all_shards_rejects_archive_without_matching_tsm(
             wrong_tsm_path,
             arcname="wrong.metrics/autogen/986/000000010-000000001.tsm",
         )
-    work_dir = tmp_path / "work"
+    run_dir = tmp_path / "run"
 
     runner = CliRunner()
     result = runner.invoke(
@@ -483,8 +509,8 @@ def test_migrate_discover_all_shards_rejects_archive_without_matching_tsm(
             "--retention",
             "autogen",
             "--all-shards",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
         ],
     )
 
@@ -492,28 +518,12 @@ def test_migrate_discover_all_shards_rejects_archive_without_matching_tsm(
     assert "does not contain matching TSM files" in result.output
 
 
-@pytest.mark.parametrize(
-    ("command", "extra_args"),
-    [
-        ("discover", []),
-        ("export", []),
-        ("transform", ["--plan", "PLACEHOLDER"]),
-        ("import", ["--host", "influxdb.example.org"]),
-    ],
-)
-def test_migrate_commands_reject_mixed_shard_selection(
-    command: str,
-    extra_args: list[str],
+def test_migrate_discover_rejects_mixed_shard_selection(
     tmp_path: Path,
 ) -> None:
-    """Commands should reject mixing --shard with --all-shards."""
+    """Discover should reject mixing --shard with --all-shards."""
     backup_dir = _create_backup_tree(tmp_path)
-    work_dir = tmp_path / "work"
-    plan_path = tmp_path / "plan.yaml"
-    plan_path.write_text("- op: drop-tag\n  tag: region\n", encoding="utf-8")
-    resolved_extra_args = [
-        str(plan_path) if arg == "PLACEHOLDER" else arg for arg in extra_args
-    ]
+    run_dir = tmp_path / "run"
 
     runner = CliRunner()
     result = runner.invoke(
@@ -521,7 +531,7 @@ def test_migrate_commands_reject_mixed_shard_selection(
         [
             "influxdb",
             "migrate",
-            command,
+            "discover",
             "--backup-dir",
             str(backup_dir),
             "--database",
@@ -531,14 +541,29 @@ def test_migrate_commands_reject_mixed_shard_selection(
             "--shard",
             "975",
             "--all-shards",
-            "--work-dir",
-            str(work_dir),
-            *resolved_extra_args,
+            "--run-dir",
+            str(run_dir),
         ],
     )
 
     assert result.exit_code != 0
     assert "Use either --shard or --all-shards, not both." in result.output
+
+
+def test_migrate_discover_help_uses_run_dir_only() -> None:
+    """Discover help should expose run-dir instead of work-dir."""
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["influxdb", "migrate", "discover", "--help"],
+    )
+
+    assert result.exit_code == 0
+    assert "--run-dir" in result.output
+    assert "--backup-dir" in result.output
+    assert "--database" in result.output
+    assert "--retention" in result.output
+    assert "--work-dir" not in result.output
 
 
 def test_migrate_discover_real_sample_data(tmp_path: Path) -> None:
@@ -548,7 +573,7 @@ def test_migrate_discover_real_sample_data(tmp_path: Path) -> None:
         / "data"
         / "sasquatch-influxdb-oss-full-20260421T050014Z"
     )
-    work_dir = tmp_path / "work"
+    run_dir = tmp_path / "run"
 
     runner = CliRunner()
     result = runner.invoke(
@@ -565,15 +590,15 @@ def test_migrate_discover_real_sample_data(tmp_path: Path) -> None:
             "autogen",
             "--shard",
             "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
         ],
     )
 
     assert result.exit_code == 0
     assert result.output == "Discovered 1 TSM file(s) in 1 shard(s).\n"
 
-    manifest = _read_manifest(work_dir)
+    manifest = _read_manifest(run_dir)
     assert manifest["shards"] == ["975"]
     member_paths = [
         record["archive_member_path"] for record in manifest["files"]
@@ -589,7 +614,7 @@ def test_migrate_export_updates_manifest_and_writes_lp(
 ) -> None:
     """Export should stage TSM files and write LP output."""
     backup_dir = _create_backup_tree(tmp_path)
-    work_dir = tmp_path / "work"
+    run_dir = tmp_path / "run"
 
     def fake_run(
         argv: list[str],
@@ -629,8 +654,8 @@ def test_migrate_export_updates_manifest_and_writes_lp(
             "autogen",
             "--shard",
             "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
         ],
     )
     assert discover_result.exit_code == 0
@@ -641,23 +666,15 @@ def test_migrate_export_updates_manifest_and_writes_lp(
             "influxdb",
             "migrate",
             "export",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--shard",
-            "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
         ],
     )
 
     assert export_result.exit_code == 0
     assert export_result.output == "Exported 1 file(s).\n"
 
-    manifest = _read_manifest(work_dir)
+    manifest = _read_manifest(run_dir)
     assert manifest["status"] == "exported"
     file_record = manifest["files"][0]
     assert file_record["exported_at"] is not None
@@ -669,26 +686,10 @@ def test_migrate_export_updates_manifest_and_writes_lp(
     )
 
 
-def test_migrate_export_discovers_when_manifest_is_empty(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    """Export should perform discovery first when no manifest exists yet."""
-    backup_dir = _create_backup_tree(tmp_path)
-    work_dir = tmp_path / "work"
+def test_migrate_export_requires_existing_run_dir(tmp_path: Path) -> None:
+    """Export should fail when the run directory does not exist."""
+    run_dir = tmp_path / "missing-run"
 
-    def fake_run(
-        argv: list[str],
-        *,
-        capture_output: bool,
-        check: bool,
-        text: bool,
-    ) -> subprocess.CompletedProcess[str]:
-        out_path = Path(argv[argv.index("-out") + 1])
-        out_path.write_text("cpu value=1i\n", encoding="utf-8")
-        return subprocess.CompletedProcess(argv, 0, "exported", "")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
     runner = CliRunner()
     result = runner.invoke(
         main,
@@ -696,111 +697,94 @@ def test_migrate_export_discovers_when_manifest_is_empty(
             "influxdb",
             "migrate",
             "export",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--shard",
-            "975",
-            "--work-dir",
-            str(work_dir),
-        ],
-    )
-
-    assert result.exit_code == 0
-    manifest = _read_manifest(work_dir)
-    assert manifest["status"] == "exported"
-    assert len(manifest["files"]) == 1
-
-
-def test_migrate_export_all_shards_bootstraps_manifest_discovery(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    """Export all-shards should discover through the backup manifest."""
-    backup_dir = _create_backup_tree(tmp_path)
-    work_dir = tmp_path / "work"
-
-    def fake_run(
-        argv: list[str],
-        *,
-        capture_output: bool,
-        check: bool,
-        text: bool,
-    ) -> subprocess.CompletedProcess[str]:
-        out_path = Path(argv[argv.index("-out") + 1])
-        out_path.write_text("cpu value=1i\n", encoding="utf-8")
-        return subprocess.CompletedProcess(argv, 0, "exported", "")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    runner = CliRunner()
-    result = runner.invoke(
-        main,
-        [
-            "influxdb",
-            "migrate",
-            "export",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--all-shards",
-            "--work-dir",
-            str(work_dir),
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert result.output == "Exported 2 file(s).\n"
-    manifest = _read_manifest(work_dir)
-    assert manifest["all_shards"] is True
-    assert manifest["shards"] == ["975", "986"]
-    assert len(manifest["files"]) == 2
-
-
-def test_migrate_export_all_shards_requires_manifest_when_bootstrapping(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    """Export all-shards should fail without a backup manifest."""
-    backup_dir = _create_backup_tree_without_manifest(tmp_path)
-    work_dir = tmp_path / "work"
-
-    def fake_run(
-        argv: list[str],
-        *,
-        capture_output: bool,
-        check: bool,
-        text: bool,
-    ) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(argv, 0, "exported", "")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    runner = CliRunner()
-    result = runner.invoke(
-        main,
-        [
-            "influxdb",
-            "migrate",
-            "export",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--all-shards",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
         ],
     )
 
     assert result.exit_code != 0
-    assert "No backup manifest file found" in result.output
+    assert "No migration-manifest.json found" in result.output
+
+
+def test_migrate_export_requires_manifest(tmp_path: Path) -> None:
+    """Export should fail when the run directory has no manifest."""
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "export",
+            "--run-dir",
+            str(run_dir),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "No migration-manifest.json found" in result.output
+
+
+def test_migrate_export_requires_discovered_files(tmp_path: Path) -> None:
+    """Export should fail when the manifest has no discovered files."""
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    manifest = {
+        "all_shards": False,
+        "backup_dir": str(tmp_path / "backup"),
+        "backup_name": "backup",
+        "created_at": "2026-04-29T00:00:00+00:00",
+        "database": "lsst.square.metrics",
+        "files": [],
+        "retention": "autogen",
+        "run_id": "abc123",
+        "shards": ["975"],
+        "status": "initialized",
+        "updated_at": "2026-04-29T00:00:00+00:00",
+    }
+    (run_dir / "migration-manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "export",
+            "--run-dir",
+            str(run_dir),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert (
+        "No discovered files found in the manifest. Run discover first."
+        in result.output
+    )
+
+
+def test_migrate_export_help_uses_run_dir_only() -> None:
+    """Export help should expose the run-dir interface only."""
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["influxdb", "migrate", "export", "--help"],
+    )
+
+    assert result.exit_code == 0
+    assert "--run-dir" in result.output
+    assert "--force" in result.output
+    assert "--backup-dir" not in result.output
+    assert "--database" not in result.output
+    assert "--retention" not in result.output
+    assert "--shard" not in result.output
+    assert "--all-shards" not in result.output
+    assert "--work-dir" not in result.output
 
 
 def test_migrate_transform_updates_manifest_and_rewrites_lp(
@@ -830,11 +814,12 @@ def test_migrate_transform_updates_manifest_and_rewrites_lp(
             "autogen",
             "--shard",
             "975",
-            "--work-dir",
+            "--run-dir",
             str(work_dir),
         ],
     )
     assert discover_result.exit_code == 0
+    run_dir = _manifest_run_dir(work_dir)
 
     export_lp_path = _write_exported_lp(
         work_dir,
@@ -847,16 +832,8 @@ def test_migrate_transform_updates_manifest_and_rewrites_lp(
             "influxdb",
             "migrate",
             "transform",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--shard",
-            "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--plan",
             str(plan_path),
         ],
@@ -900,10 +877,11 @@ def test_migrate_transform_skips_already_transformed_files(
             "autogen",
             "--shard",
             "975",
-            "--work-dir",
+            "--run-dir",
             str(work_dir),
         ],
     )
+    run_dir = _manifest_run_dir(work_dir)
     export_lp_path = _write_exported_lp(
         work_dir,
         "weather,region=us temp=82\n",
@@ -915,16 +893,8 @@ def test_migrate_transform_skips_already_transformed_files(
             "influxdb",
             "migrate",
             "transform",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--shard",
-            "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--plan",
             str(plan_path),
         ],
@@ -938,16 +908,8 @@ def test_migrate_transform_skips_already_transformed_files(
             "influxdb",
             "migrate",
             "transform",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--shard",
-            "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--plan",
             str(plan_path),
         ],
@@ -988,10 +950,11 @@ def test_migrate_transform_reapplies_with_force(tmp_path: Path) -> None:
             "autogen",
             "--shard",
             "975",
-            "--work-dir",
+            "--run-dir",
             str(work_dir),
         ],
     )
+    run_dir = _manifest_run_dir(work_dir)
     export_lp_path = _write_exported_lp(
         work_dir,
         "weather,region=us temp=82\n",
@@ -1003,16 +966,8 @@ def test_migrate_transform_reapplies_with_force(tmp_path: Path) -> None:
             "influxdb",
             "migrate",
             "transform",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--shard",
-            "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--plan",
             str(first_plan),
         ],
@@ -1025,16 +980,8 @@ def test_migrate_transform_reapplies_with_force(tmp_path: Path) -> None:
             "influxdb",
             "migrate",
             "transform",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--shard",
-            "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--plan",
             str(second_plan),
             "--force",
@@ -1069,10 +1016,11 @@ def test_migrate_transform_rejects_invalid_plan_extension(
             "autogen",
             "--shard",
             "975",
-            "--work-dir",
+            "--run-dir",
             str(work_dir),
         ],
     )
+    run_dir = _manifest_run_dir(work_dir)
     _write_exported_lp(work_dir, "weather,region=us temp=82\n")
 
     result = runner.invoke(
@@ -1081,16 +1029,8 @@ def test_migrate_transform_rejects_invalid_plan_extension(
             "influxdb",
             "migrate",
             "transform",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--shard",
-            "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--plan",
             str(plan_path),
         ],
@@ -1127,10 +1067,11 @@ def test_migrate_transform_rejects_unknown_operation(tmp_path: Path) -> None:
             "autogen",
             "--shard",
             "975",
-            "--work-dir",
+            "--run-dir",
             str(work_dir),
         ],
     )
+    run_dir = _manifest_run_dir(work_dir)
     _write_exported_lp(work_dir, "weather,region=us temp=82\n")
 
     result = runner.invoke(
@@ -1139,16 +1080,8 @@ def test_migrate_transform_rejects_unknown_operation(tmp_path: Path) -> None:
             "influxdb",
             "migrate",
             "transform",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--shard",
-            "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--plan",
             str(plan_path),
         ],
@@ -1183,10 +1116,11 @@ def test_migrate_transform_requires_exported_file(tmp_path: Path) -> None:
             "autogen",
             "--shard",
             "975",
-            "--work-dir",
+            "--run-dir",
             str(work_dir),
         ],
     )
+    run_dir = _manifest_run_dir(work_dir)
 
     result = runner.invoke(
         main,
@@ -1194,16 +1128,8 @@ def test_migrate_transform_requires_exported_file(tmp_path: Path) -> None:
             "influxdb",
             "migrate",
             "transform",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--shard",
-            "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--plan",
             str(plan_path),
         ],
@@ -1245,10 +1171,11 @@ def test_migrate_transform_rejects_changed_plan_without_force(
             "autogen",
             "--shard",
             "975",
-            "--work-dir",
+            "--run-dir",
             str(work_dir),
         ],
     )
+    run_dir = _manifest_run_dir(work_dir)
     _write_exported_lp(work_dir, "weather,region=us temp=82\n")
 
     first_result = runner.invoke(
@@ -1257,16 +1184,8 @@ def test_migrate_transform_rejects_changed_plan_without_force(
             "influxdb",
             "migrate",
             "transform",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--shard",
-            "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--plan",
             str(first_plan),
         ],
@@ -1279,16 +1198,8 @@ def test_migrate_transform_rejects_changed_plan_without_force(
             "influxdb",
             "migrate",
             "transform",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--shard",
-            "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--plan",
             str(second_plan),
         ],
@@ -1327,10 +1238,11 @@ def test_migrate_transform_reports_tag_to_field_conflicts(
             "autogen",
             "--shard",
             "975",
-            "--work-dir",
+            "--run-dir",
             str(work_dir),
         ],
     )
+    run_dir = _manifest_run_dir(work_dir)
     _write_exported_lp(work_dir, 'weather,region=us region="west"\n')
 
     result = runner.invoke(
@@ -1339,16 +1251,8 @@ def test_migrate_transform_reports_tag_to_field_conflicts(
             "influxdb",
             "migrate",
             "transform",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--shard",
-            "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--plan",
             str(plan_path),
         ],
@@ -1385,11 +1289,12 @@ def test_migrate_transform_saves_progress_after_each_file(
             "--retention",
             "autogen",
             "--all-shards",
-            "--work-dir",
+            "--run-dir",
             str(work_dir),
         ],
     )
     assert discover_result.exit_code == 0
+    run_dir = _manifest_run_dir(work_dir)
     _write_all_exported_lp(
         work_dir,
         {
@@ -1404,14 +1309,8 @@ def test_migrate_transform_saves_progress_after_each_file(
             "influxdb",
             "migrate",
             "transform",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--plan",
             str(plan_path),
         ],
@@ -1452,11 +1351,12 @@ def test_migrate_transform_defaults_to_all_shards(
             "--retention",
             "autogen",
             "--all-shards",
-            "--work-dir",
+            "--run-dir",
             str(work_dir),
         ],
     )
     assert discover_result.exit_code == 0
+    run_dir = _manifest_run_dir(work_dir)
     file_paths = _write_all_exported_lp(
         work_dir,
         {
@@ -1471,14 +1371,8 @@ def test_migrate_transform_defaults_to_all_shards(
             "influxdb",
             "migrate",
             "transform",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--plan",
             str(plan_path),
         ],
@@ -1490,6 +1384,50 @@ def test_migrate_transform_defaults_to_all_shards(
     assert file_paths["986"].read_text(encoding="utf-8") == "cpu value=1i\n"
 
 
+def test_migrate_transform_requires_run_dir_manifest(tmp_path: Path) -> None:
+    """Transform should fail when run-dir has no manifest."""
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    plan_path = tmp_path / "plan.yaml"
+    plan_path.write_text("- op: drop-tag\n  tag: region\n", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "transform",
+            "--run-dir",
+            str(run_dir),
+            "--plan",
+            str(plan_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "No migration-manifest.json found" in result.output
+
+
+def test_migrate_transform_help_uses_run_dir_only() -> None:
+    """Transform help should expose the run-dir interface only."""
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["influxdb", "migrate", "transform", "--help"],
+    )
+
+    assert result.exit_code == 0
+    assert "--run-dir" in result.output
+    assert "--plan" in result.output
+    assert "--backup-dir" not in result.output
+    assert "--database" not in result.output
+    assert "--retention" not in result.output
+    assert "--shard" not in result.output
+    assert "--all-shards" not in result.output
+    assert "--work-dir" not in result.output
+
+
 def test_migrate_import_updates_manifest_and_rewrites_headers(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1499,6 +1437,7 @@ def test_migrate_import_updates_manifest_and_rewrites_headers(
     work_dir = tmp_path / "work"
     runner = CliRunner()
     _discover_source_run(runner, backup_dir, work_dir)
+    run_dir = _manifest_run_dir(work_dir)
     file_path = _write_exported_lp(
         work_dir,
         "# DML\n"
@@ -1527,16 +1466,8 @@ def test_migrate_import_updates_manifest_and_rewrites_headers(
             "influxdb",
             "migrate",
             "import",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--shard",
-            "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--host",
             "influxdb.example.org",
             "--target-database",
@@ -1567,6 +1498,7 @@ def test_migrate_import_adds_missing_headers_and_reports_it(
     work_dir = tmp_path / "work"
     runner = CliRunner()
     _discover_source_run(runner, backup_dir, work_dir)
+    run_dir = _manifest_run_dir(work_dir)
     file_path = _write_exported_lp(work_dir, "weather temp=82\n")
     _mark_transformed(work_dir)
 
@@ -1586,16 +1518,8 @@ def test_migrate_import_adds_missing_headers_and_reports_it(
             "influxdb",
             "migrate",
             "import",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--shard",
-            "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--host",
             "influxdb.example.org",
             "--target-database",
@@ -1624,6 +1548,7 @@ def test_migrate_import_is_quiet_when_headers_already_match(
     work_dir = tmp_path / "work"
     runner = CliRunner()
     _discover_source_run(runner, backup_dir, work_dir)
+    run_dir = _manifest_run_dir(work_dir)
     _write_exported_lp(
         work_dir,
         "# DML\n"
@@ -1649,16 +1574,8 @@ def test_migrate_import_is_quiet_when_headers_already_match(
             "influxdb",
             "migrate",
             "import",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--shard",
-            "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--host",
             "influxdb.example.org",
             "--target-database",
@@ -1681,6 +1598,7 @@ def test_migrate_import_skips_already_imported_without_force(
     work_dir = tmp_path / "work"
     runner = CliRunner()
     _discover_source_run(runner, backup_dir, work_dir)
+    run_dir = _manifest_run_dir(work_dir)
     _write_exported_lp(work_dir, "weather temp=82\n")
     _mark_transformed(work_dir)
     manifest_path = next(work_dir.rglob("migration-manifest.json"))
@@ -1711,16 +1629,8 @@ def test_migrate_import_skips_already_imported_without_force(
             "influxdb",
             "migrate",
             "import",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--shard",
-            "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--host",
             "influxdb.example.org",
         ],
@@ -1737,6 +1647,7 @@ def test_migrate_import_requires_transformed_file(tmp_path: Path) -> None:
     work_dir = tmp_path / "work"
     runner = CliRunner()
     _discover_source_run(runner, backup_dir, work_dir)
+    run_dir = _manifest_run_dir(work_dir)
     _write_exported_lp(work_dir, "weather temp=82\n")
 
     result = runner.invoke(
@@ -1745,16 +1656,8 @@ def test_migrate_import_requires_transformed_file(tmp_path: Path) -> None:
             "influxdb",
             "migrate",
             "import",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--shard",
-            "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--host",
             "influxdb.example.org",
         ],
@@ -1773,6 +1676,7 @@ def test_migrate_import_records_subprocess_failure(
     work_dir = tmp_path / "work"
     runner = CliRunner()
     _discover_source_run(runner, backup_dir, work_dir)
+    run_dir = _manifest_run_dir(work_dir)
     _write_exported_lp(work_dir, "weather temp=82\n")
     _mark_transformed(work_dir)
 
@@ -1792,16 +1696,8 @@ def test_migrate_import_records_subprocess_failure(
             "influxdb",
             "migrate",
             "import",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--shard",
-            "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--host",
             "influxdb.example.org",
         ],
@@ -1833,11 +1729,12 @@ def test_migrate_import_saves_progress_after_each_file(
             "--retention",
             "autogen",
             "--all-shards",
-            "--work-dir",
+            "--run-dir",
             str(work_dir),
         ],
     )
     assert discover_result.exit_code == 0
+    run_dir = _manifest_run_dir(work_dir)
     _write_all_exported_lp(
         work_dir,
         {
@@ -1869,14 +1766,8 @@ def test_migrate_import_saves_progress_after_each_file(
             "influxdb",
             "migrate",
             "import",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--host",
             "influxdb.example.org",
         ],
@@ -1913,11 +1804,12 @@ def test_migrate_import_defaults_to_all_shards(
             "--retention",
             "autogen",
             "--all-shards",
-            "--work-dir",
+            "--run-dir",
             str(work_dir),
         ],
     )
     assert discover_result.exit_code == 0
+    run_dir = _manifest_run_dir(work_dir)
     file_paths = _write_all_exported_lp(
         work_dir,
         {
@@ -1947,14 +1839,8 @@ def test_migrate_import_defaults_to_all_shards(
             "influxdb",
             "migrate",
             "import",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(run_dir),
             "--host",
             "influxdb.example.org",
         ],
@@ -1969,12 +1855,55 @@ def test_migrate_import_defaults_to_all_shards(
     assert len(calls) == 2
 
 
+def test_migrate_import_requires_run_dir_manifest(tmp_path: Path) -> None:
+    """Import should fail when run-dir has no manifest."""
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "import",
+            "--run-dir",
+            str(run_dir),
+            "--host",
+            "influxdb.example.org",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "No migration-manifest.json found" in result.output
+
+
+def test_migrate_import_help_uses_run_dir_only() -> None:
+    """Import help should expose the run-dir interface only."""
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["influxdb", "migrate", "import", "--help"],
+    )
+
+    assert result.exit_code == 0
+    assert "--run-dir" in result.output
+    assert "--host" in result.output
+    assert "--backup-dir" not in result.output
+    assert "--database" not in result.output
+    assert "--retention" not in result.output
+    assert "--shard" not in result.output
+    assert "--all-shards" not in result.output
+    assert "--work-dir" not in result.output
+
+
 def test_explicit_shard_runs_remain_isolated_from_all_shards(
     tmp_path: Path,
 ) -> None:
-    """Explicit shard runs should stay isolated from implicit all-shards."""
+    """Explicit and all-shards run directories should stay isolated."""
     backup_dir = _create_backup_tree(tmp_path)
-    work_dir = tmp_path / "work"
+    explicit_run_dir = tmp_path / "explicit-run"
+    all_shards_run_dir = tmp_path / "all-shards-run"
     plan_path = tmp_path / "plan.yaml"
     plan_path.write_text("- op: drop-tag\n  tag: region\n", encoding="utf-8")
 
@@ -1993,12 +1922,57 @@ def test_explicit_shard_runs_remain_isolated_from_all_shards(
             "autogen",
             "--shard",
             "975",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(explicit_run_dir),
         ],
     )
     assert discover_result.exit_code == 0
-    _write_exported_lp(work_dir, "weather,region=us temp=82\n")
+    explicit_manifest = json.loads(
+        (explicit_run_dir / "migration-manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    explicit_lp_path = Path(explicit_manifest["files"][0]["export_lp_path"])
+    explicit_lp_path.parent.mkdir(parents=True, exist_ok=True)
+    explicit_lp_path.write_text(
+        "weather,region=us temp=82\n",
+        encoding="utf-8",
+    )
+
+    all_shards_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--all-shards",
+            "--run-dir",
+            str(all_shards_run_dir),
+        ],
+    )
+    assert all_shards_result.exit_code == 0
+    all_shards_manifest = json.loads(
+        (all_shards_run_dir / "migration-manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    all_shards_lp_paths = {
+        record["shard_id"]: Path(record["export_lp_path"])
+        for record in all_shards_manifest["files"]
+    }
+    for shard_id, content in {
+        "975": "weather,region=us temp=82\n",
+        "986": "cpu,region=us value=1i\n",
+    }.items():
+        lp_path = all_shards_lp_paths[shard_id]
+        lp_path.parent.mkdir(parents=True, exist_ok=True)
+        lp_path.write_text(content, encoding="utf-8")
 
     result = runner.invoke(
         main,
@@ -2006,23 +1980,22 @@ def test_explicit_shard_runs_remain_isolated_from_all_shards(
             "influxdb",
             "migrate",
             "transform",
-            "--backup-dir",
-            str(backup_dir),
-            "--database",
-            "lsst.square.metrics",
-            "--retention",
-            "autogen",
-            "--work-dir",
-            str(work_dir),
+            "--run-dir",
+            str(explicit_run_dir),
             "--plan",
             str(plan_path),
         ],
     )
 
-    assert result.exit_code != 0
+    assert result.exit_code == 0
+    assert explicit_lp_path.read_text(encoding="utf-8") == "weather temp=82\n"
     assert (
-        "No discovered files found in the manifest. Run export first."
-        in result.output
+        all_shards_lp_paths["975"].read_text(encoding="utf-8")
+        == "weather,region=us temp=82\n"
+    )
+    assert (
+        all_shards_lp_paths["986"].read_text(encoding="utf-8")
+        == "cpu,region=us value=1i\n"
     )
 
 
@@ -2060,7 +2033,7 @@ def test_migrate_status_reports_discovered_run(tmp_path: Path) -> None:
             "autogen",
             "--shard",
             "975",
-            "--work-dir",
+            "--run-dir",
             str(work_dir),
         ],
     )
@@ -2105,7 +2078,7 @@ def test_migrate_status_reports_exported_run(tmp_path: Path) -> None:
             "autogen",
             "--shard",
             "975",
-            "--work-dir",
+            "--run-dir",
             str(work_dir),
         ],
     )
@@ -2148,7 +2121,7 @@ def test_migrate_status_reports_transformed_run(tmp_path: Path) -> None:
             "autogen",
             "--shard",
             "975",
-            "--work-dir",
+            "--run-dir",
             str(work_dir),
         ],
     )
@@ -2192,7 +2165,7 @@ def test_migrate_status_reports_imported_run(tmp_path: Path) -> None:
             "autogen",
             "--shard",
             "975",
-            "--work-dir",
+            "--run-dir",
             str(work_dir),
         ],
     )
@@ -2236,7 +2209,7 @@ def test_migrate_status_reports_in_progress_and_error_shards(
             "--retention",
             "autogen",
             "--all-shards",
-            "--work-dir",
+            "--run-dir",
             str(work_dir),
         ],
     )

@@ -74,43 +74,9 @@ def _run_id(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
 
 
-def _slugify(value: str) -> str:
-    """Create a filesystem-friendly slug."""
-    return "".join(
-        char if char.isalnum() or char in ".-_" else "_" for char in value
-    )
-
-
-def _run_dir_name(
-    backup_name: str,
-    database: str,
-    retention: str,
-    shards: list[str],
-) -> str:
-    """Return the per-run working directory name."""
-    run_id = _run_id(backup_name, database, retention, shards)
-    return f"{_slugify(database)}--{_slugify(retention)}--{run_id}"
-
-
 def _manifest_path(run_dir: Path) -> Path:
     """Return the manifest path within a run directory."""
     return run_dir / "migration-manifest.json"
-
-
-def _run_dir(
-    work_dir: Path,
-    backup_dir: Path,
-    database: str,
-    retention: str,
-    shards: list[str],
-) -> Path:
-    """Return the working directory for one migration run."""
-    return work_dir / _run_dir_name(
-        backup_dir.name,
-        database,
-        retention,
-        shards,
-    )
 
 
 @dataclass
@@ -215,86 +181,6 @@ def _load_manifest_from_run_dir(run_dir: Path) -> MigrationManifest:
         raise click.ClickException(
             f"Manifest file {manifest_path} is missing required fields."
         ) from exc
-
-
-def _load_manifest(
-    run_dir: Path,
-    backup_dir: Path,
-    database: str,
-    retention: str,
-    selection_shards: list[str],
-    *,
-    all_shards: bool,
-) -> MigrationManifest:
-    """Load an existing manifest or initialize a new one."""
-    run_dir.mkdir(parents=True, exist_ok=True)
-    manifest_path = _manifest_path(run_dir)
-    if manifest_path.exists():
-        data = json.loads(manifest_path.read_text(encoding="utf-8"))
-        manifest = MigrationManifest(
-            run_id=data["run_id"],
-            backup_dir=data["backup_dir"],
-            backup_name=data["backup_name"],
-            database=data["database"],
-            retention=data["retention"],
-            all_shards=data.get("all_shards", False),
-            shards=list(data["shards"]),
-            created_at=data["created_at"],
-            updated_at=data["updated_at"],
-            status=data["status"],
-            transform_plan_path=data.get("transform_plan_path"),
-            transform_plan_hash=data.get("transform_plan_hash"),
-            files=[
-                MigrationFileRecord(**record)
-                for record in data.get("files", [])
-            ],
-        )
-        expected = {
-            "backup_dir": str(backup_dir),
-            "backup_name": backup_dir.name,
-            "database": database,
-            "retention": retention,
-            "all_shards": all_shards,
-        }
-        actual = {
-            "backup_dir": manifest.backup_dir,
-            "backup_name": manifest.backup_name,
-            "database": manifest.database,
-            "retention": manifest.retention,
-            "all_shards": manifest.all_shards,
-        }
-        if actual != expected:
-            raise click.ClickException(
-                "Existing migration manifest does not match "
-                "the supplied inputs."
-            )
-        if not all_shards and sorted(manifest.shards) != sorted(
-            selection_shards
-        ):
-            raise click.ClickException(
-                "Existing migration manifest does not match "
-                "the supplied shard list."
-            )
-        return manifest
-
-    now = _utc_now()
-    return MigrationManifest(
-        run_id=_run_id(
-            backup_dir.name,
-            database,
-            retention,
-            selection_shards,
-        ),
-        backup_dir=str(backup_dir),
-        backup_name=backup_dir.name,
-        database=database,
-        retention=retention,
-        all_shards=all_shards,
-        shards=[] if all_shards else sorted(selection_shards),
-        created_at=now,
-        updated_at=now,
-        status="initialized",
-    )
 
 
 @dataclass(frozen=True)
@@ -1306,13 +1192,13 @@ def _import_files(
     return imported_count
 
 
-def _common_run_options[F: Callable[..., Any]](function: F) -> F:
-    """Add shared migration-run options to a Click command."""
+def _discover_options[F: Callable[..., Any]](function: F) -> F:
+    """Add discover-specific run and source options to a command."""
     function = click.option(
-        "--work-dir",
+        "--run-dir",
         type=click.Path(file_okay=False, path_type=Path),
         required=True,
-        help="Directory to store per-run manifests and migration artifacts.",
+        help="New migration run directory to create.",
     )(function)
     function = click.option("--retention", required=True)(function)
     function = click.option("--database", required=True)(function)
@@ -1363,15 +1249,25 @@ def _optional_shard_selection_options[F: Callable[..., Any]](
     )(function)
 
 
+def _run_dir_option[F: Callable[..., Any]](function: F) -> F:
+    """Add a required migration run directory option."""
+    return click.option(
+        "--run-dir",
+        type=click.Path(file_okay=False, path_type=Path),
+        required=True,
+        help="Migration run directory containing migration-manifest.json.",
+    )(function)
+
+
 @click.command("discover")
-@_common_run_options
+@_discover_options
 @_required_shard_selection_options
 def discover(
+    run_dir: Path,
     backup_dir: Path,
     database: str,
     retention: str,
     shards: tuple[str, ...],
-    work_dir: Path,
     *,
     all_shards: bool,
 ) -> None:
@@ -1382,20 +1278,26 @@ def discover(
         require_selection=True,
         default_all_shards=False,
     )
-    run_dir = _run_dir(
-        work_dir,
-        backup_dir,
-        database,
-        retention,
-        selection_shards,
-    )
-    manifest = _load_manifest(
-        run_dir,
-        backup_dir,
-        database,
-        retention,
-        selection_shards,
+    if run_dir.exists():
+        raise click.ClickException(f"Run directory {run_dir} already exists.")
+    run_dir.mkdir(parents=True, exist_ok=False)
+    now = _utc_now()
+    manifest = MigrationManifest(
+        run_id=_run_id(
+            backup_dir.name,
+            database,
+            retention,
+            selection_shards,
+        ),
+        backup_dir=str(backup_dir),
+        backup_name=backup_dir.name,
+        database=database,
+        retention=retention,
         all_shards=use_all_shards,
+        shards=[] if use_all_shards else sorted(selection_shards),
+        created_at=now,
+        updated_at=now,
+        status="initialized",
     )
     discovered_count = _discover_files(run_dir, manifest, backup_dir)
     click.echo(
@@ -1406,47 +1308,19 @@ def discover(
 
 
 @click.command("export")
-@_common_run_options
-@_required_shard_selection_options
+@_run_dir_option
 @click.option(
     "--force",
     is_flag=True,
     help="Re-export files already marked exported in the manifest.",
 )
 def export_command(
-    backup_dir: Path,
-    database: str,
-    retention: str,
-    shards: tuple[str, ...],
-    work_dir: Path,
+    run_dir: Path,
     *,
-    all_shards: bool,
     force: bool,
 ) -> None:
     """Export discovered TSM files to line protocol."""
-    selection_shards, use_all_shards = _resolve_shard_selection(
-        shards,
-        all_shards=all_shards,
-        require_selection=True,
-        default_all_shards=False,
-    )
-    run_dir = _run_dir(
-        work_dir,
-        backup_dir,
-        database,
-        retention,
-        selection_shards,
-    )
-    manifest = _load_manifest(
-        run_dir,
-        backup_dir,
-        database,
-        retention,
-        selection_shards,
-        all_shards=use_all_shards,
-    )
-    if not manifest.files:
-        _discover_files(run_dir, manifest, backup_dir)
+    manifest = _load_manifest_from_run_dir(run_dir)
     exported_count = _export_files(
         run_dir,
         manifest,
@@ -1456,8 +1330,7 @@ def export_command(
 
 
 @click.command("transform")
-@_common_run_options
-@_optional_shard_selection_options
+@_run_dir_option
 @click.option(
     "--plan",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
@@ -1470,38 +1343,13 @@ def export_command(
     help="Reapply the transform plan to files already marked transformed.",
 )
 def transform_command(
-    backup_dir: Path,
-    database: str,
-    retention: str,
-    shards: tuple[str, ...],
-    work_dir: Path,
+    run_dir: Path,
     plan: Path,
     *,
-    all_shards: bool,
     force: bool,
 ) -> None:
     """Transform exported line protocol files in place."""
-    selection_shards, use_all_shards = _resolve_shard_selection(
-        shards,
-        all_shards=all_shards,
-        require_selection=False,
-        default_all_shards=True,
-    )
-    run_dir = _run_dir(
-        work_dir,
-        backup_dir,
-        database,
-        retention,
-        selection_shards,
-    )
-    manifest = _load_manifest(
-        run_dir,
-        backup_dir,
-        database,
-        retention,
-        selection_shards,
-        all_shards=use_all_shards,
-    )
+    manifest = _load_manifest_from_run_dir(run_dir)
     transformed_count = _transform_files(
         run_dir,
         manifest,
@@ -1512,8 +1360,7 @@ def transform_command(
 
 
 @click.command("import")
-@_common_run_options
-@_optional_shard_selection_options
+@_run_dir_option
 @click.option("--host", required=True, help="InfluxDB host name.")
 @click.option("--port", type=int, default=8086, show_default=True)
 @click.option("--username", default=None, help="InfluxDB username.")
@@ -1554,11 +1401,7 @@ def transform_command(
     help="Re-import files already marked imported in the manifest.",
 )
 def import_command(
-    backup_dir: Path,
-    database: str,
-    retention: str,
-    shards: tuple[str, ...],
-    work_dir: Path,
+    run_dir: Path,
     host: str,
     port: int,
     username: str | None,
@@ -1568,34 +1411,13 @@ def import_command(
     precision: str,
     pps: int,
     *,
-    all_shards: bool,
     compressed: bool,
     ssl: bool,
     unsafe_ssl: bool,
     force: bool,
 ) -> None:
     """Import transformed line protocol files into InfluxDB."""
-    selection_shards, use_all_shards = _resolve_shard_selection(
-        shards,
-        all_shards=all_shards,
-        require_selection=False,
-        default_all_shards=True,
-    )
-    run_dir = _run_dir(
-        work_dir,
-        backup_dir,
-        database,
-        retention,
-        selection_shards,
-    )
-    manifest = _load_manifest(
-        run_dir,
-        backup_dir,
-        database,
-        retention,
-        selection_shards,
-        all_shards=use_all_shards,
-    )
+    manifest = _load_manifest_from_run_dir(run_dir)
     resolved_target_database = target_database or manifest.database
     resolved_target_retention = target_retention or manifest.retention
     imported_count = _import_files(
@@ -1618,12 +1440,7 @@ def import_command(
 
 
 @click.command("status")
-@click.option(
-    "--run-dir",
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
-    required=True,
-    help="Migration run directory containing migration-manifest.json.",
-)
+@_run_dir_option
 def status_command(run_dir: Path) -> None:
     """Report migration progress for a single run directory."""
     manifest = _load_manifest_from_run_dir(run_dir)
