@@ -108,6 +108,13 @@ def _read_manifest(work_dir: Path) -> dict[str, Any]:
     return json.loads(manifests[0].read_text(encoding="utf-8"))
 
 
+def _manifest_run_dir(work_dir: Path) -> Path:
+    """Return the single run directory containing the manifest."""
+    manifests = list(work_dir.rglob("migration-manifest.json"))
+    assert len(manifests) == 1
+    return manifests[0].parent
+
+
 def _write_exported_lp(work_dir: Path, content: str) -> Path:
     """Write exported line protocol content for the current manifest."""
     manifest = _read_manifest(work_dir)
@@ -140,6 +147,34 @@ def _mark_transformed(work_dir: Path) -> None:
     manifest["status"] = "transformed"
     for record in manifest["files"]:
         record["transformed_at"] = "2026-04-29T00:00:00+00:00"
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _mark_exported(work_dir: Path) -> None:
+    """Mark all manifest files as exported for status tests."""
+    manifest_path = next(work_dir.rglob("migration-manifest.json"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["status"] = "exported"
+    for record in manifest["files"]:
+        record["exported_at"] = "2026-04-29T00:00:00+00:00"
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _mark_imported(work_dir: Path) -> None:
+    """Mark all manifest files as imported for status tests."""
+    manifest_path = next(work_dir.rglob("migration-manifest.json"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["status"] = "imported"
+    for record in manifest["files"]:
+        record["imported_at"] = "2026-04-29T01:00:00+00:00"
+        record["transformed_at"] = "2026-04-29T00:30:00+00:00"
+        record["exported_at"] = "2026-04-29T00:00:00+00:00"
     manifest_path.write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -1324,6 +1359,76 @@ def test_migrate_transform_reports_tag_to_field_conflicts(
     assert manifest["files"][0]["last_error"] is not None
 
 
+def test_migrate_transform_saves_progress_after_each_file(
+    tmp_path: Path,
+) -> None:
+    """Transform should persist successful file progress before failure."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    plan_path = tmp_path / "plan.yaml"
+    plan_path.write_text(
+        "- op: convert-tag-to-field\n  tag: region\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    discover_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--all-shards",
+            "--work-dir",
+            str(work_dir),
+        ],
+    )
+    assert discover_result.exit_code == 0
+    _write_all_exported_lp(
+        work_dir,
+        {
+            "975": "weather,region=us temp=82\n",
+            "986": 'weather,region=us region="west"\n',
+        },
+    )
+
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "transform",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--work-dir",
+            str(work_dir),
+            "--plan",
+            str(plan_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    manifest = _read_manifest(work_dir)
+    by_shard = {record["shard_id"]: record for record in manifest["files"]}
+    assert manifest["status"] == "transforming"
+    assert manifest["transform_plan_path"] == str(plan_path)
+    assert manifest["transform_plan_hash"] is not None
+    assert by_shard["975"]["transformed_at"] is not None
+    assert by_shard["975"]["last_error"] is None
+    assert by_shard["986"]["transformed_at"] is None
+    assert by_shard["986"]["last_error"] is not None
+
+
 def test_migrate_transform_defaults_to_all_shards(
     tmp_path: Path,
 ) -> None:
@@ -1707,6 +1812,86 @@ def test_migrate_import_records_subprocess_failure(
     assert manifest["files"][0]["last_error"] == "boom"
 
 
+def test_migrate_import_saves_progress_after_each_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Import should persist successful file progress before failure."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    runner = CliRunner()
+    discover_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--all-shards",
+            "--work-dir",
+            str(work_dir),
+        ],
+    )
+    assert discover_result.exit_code == 0
+    _write_all_exported_lp(
+        work_dir,
+        {
+            "975": "weather temp=82\n",
+            "986": "cpu value=1i\n",
+        },
+    )
+    _mark_transformed(work_dir)
+
+    calls = 0
+
+    def fake_run(
+        argv: list[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return subprocess.CompletedProcess(argv, 0, "imported", "")
+        return subprocess.CompletedProcess(argv, 1, "", "boom")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "import",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--work-dir",
+            str(work_dir),
+            "--host",
+            "influxdb.example.org",
+        ],
+    )
+
+    assert result.exit_code != 0
+    manifest = _read_manifest(work_dir)
+    by_shard = {record["shard_id"]: record for record in manifest["files"]}
+    assert manifest["status"] == "importing"
+    assert by_shard["975"]["imported_at"] is not None
+    assert by_shard["975"]["last_error"] is None
+    assert by_shard["986"]["imported_at"] is None
+    assert by_shard["986"]["last_error"] == "boom"
+
+
 def test_migrate_import_defaults_to_all_shards(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1839,3 +2024,294 @@ def test_explicit_shard_runs_remain_isolated_from_all_shards(
         "No discovered files found in the manifest. Run export first."
         in result.output
     )
+
+
+def test_migrate_status_requires_manifest(tmp_path: Path) -> None:
+    """Status should fail when the run directory has no manifest."""
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["influxdb", "migrate", "status", "--run-dir", str(run_dir)],
+    )
+
+    assert result.exit_code != 0
+    assert "No migration-manifest.json found" in result.output
+
+
+def test_migrate_status_reports_discovered_run(tmp_path: Path) -> None:
+    """Status should report a discovered-only run."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+        ],
+    )
+    assert result.exit_code == 0
+
+    status_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "status",
+            "--run-dir",
+            str(_manifest_run_dir(work_dir)),
+        ],
+    )
+
+    assert status_result.exit_code == 0
+    assert "Manifest status: discovered" in status_result.output
+    assert "Mode: explicit" in status_result.output
+    assert "Exported: 0/1" in status_result.output
+    assert "975    1/1" in status_result.output
+    assert "discovered" in status_result.output
+    assert "Errors:" not in status_result.output
+
+
+def test_migrate_status_reports_exported_run(tmp_path: Path) -> None:
+    """Status should report an exported run."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    runner = CliRunner()
+    discover_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+        ],
+    )
+    assert discover_result.exit_code == 0
+    _mark_exported(work_dir)
+
+    status_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "status",
+            "--run-dir",
+            str(_manifest_run_dir(work_dir)),
+        ],
+    )
+
+    assert status_result.exit_code == 0
+    assert "Manifest status: exported" in status_result.output
+    assert "Exported: 1/1" in status_result.output
+    assert "Transformed: 0/1" in status_result.output
+
+
+def test_migrate_status_reports_transformed_run(tmp_path: Path) -> None:
+    """Status should report a transformed run."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    runner = CliRunner()
+    discover_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+        ],
+    )
+    assert discover_result.exit_code == 0
+    _mark_exported(work_dir)
+    _mark_transformed(work_dir)
+
+    status_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "status",
+            "--run-dir",
+            str(_manifest_run_dir(work_dir)),
+        ],
+    )
+
+    assert status_result.exit_code == 0
+    assert "Manifest status: transformed" in status_result.output
+    assert "Transformed: 1/1" in status_result.output
+    assert "Imported: 0/1" in status_result.output
+
+
+def test_migrate_status_reports_imported_run(tmp_path: Path) -> None:
+    """Status should report an imported run."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    runner = CliRunner()
+    discover_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--work-dir",
+            str(work_dir),
+        ],
+    )
+    assert discover_result.exit_code == 0
+    _mark_imported(work_dir)
+
+    status_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "status",
+            "--run-dir",
+            str(_manifest_run_dir(work_dir)),
+        ],
+    )
+
+    assert status_result.exit_code == 0
+    assert "Manifest status: imported" in status_result.output
+    assert "Imported: 1/1" in status_result.output
+    assert "Error files: 0" in status_result.output
+
+
+def test_migrate_status_reports_in_progress_and_error_shards(
+    tmp_path: Path,
+) -> None:
+    """Status should report mixed shard progress and errors."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    runner = CliRunner()
+    discover_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--all-shards",
+            "--work-dir",
+            str(work_dir),
+        ],
+    )
+    assert discover_result.exit_code == 0
+    manifest_path = _manifest_run_dir(work_dir) / "migration-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["status"] = "transformed"
+    by_shard = {record["shard_id"]: record for record in manifest["files"]}
+    by_shard["975"]["exported_at"] = "2026-04-29T00:00:00+00:00"
+    by_shard["975"]["transformed_at"] = "2026-04-29T00:30:00+00:00"
+    by_shard["986"]["exported_at"] = "2026-04-29T00:00:00+00:00"
+    by_shard["986"]["last_error"] = "boom"
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    status_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "status",
+            "--run-dir",
+            str(_manifest_run_dir(work_dir)),
+        ],
+    )
+
+    assert status_result.exit_code == 0
+    assert "Mode: all-shards" in status_result.output
+    assert "Error files: 1" in status_result.output
+    assert "975" in status_result.output
+    assert "transformed" in status_result.output
+    assert "986" in status_result.output
+    assert "error" in status_result.output
+    assert "Errors:" in status_result.output
+    assert "File: 000000010-000000001.lp" in status_result.output
+    assert "Error: boom" in status_result.output
+
+
+def test_migrate_status_reports_invalid_manifest_json(tmp_path: Path) -> None:
+    """Status should fail on invalid manifest JSON."""
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "migration-manifest.json").write_text(
+        "{bad json\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["influxdb", "migrate", "status", "--run-dir", str(run_dir)],
+    )
+
+    assert result.exit_code != 0
+    assert "Failed to parse manifest file" in result.output
+
+
+def test_migrate_status_reports_missing_required_fields(
+    tmp_path: Path,
+) -> None:
+    """Status should fail on incomplete manifest data."""
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "migration-manifest.json").write_text(
+        json.dumps({"run_id": "abc"}) + "\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["influxdb", "migrate", "status", "--run-dir", str(run_dir)],
+    )
+
+    assert result.exit_code != 0
+    assert "missing required fields" in result.output

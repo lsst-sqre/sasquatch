@@ -154,6 +154,21 @@ class MigrationManifest:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class ShardProgress:
+    """Runtime-only progress summary for one shard."""
+
+    shard_id: str
+    file_count: int
+    exported_count: int
+    transformed_count: int
+    imported_count: int
+    error_count: int
+    state: str
+    latest_timestamp: str | None
+    errors: list[tuple[str, str]]
+
+
 def _save_manifest(run_dir: Path, manifest: MigrationManifest) -> None:
     """Write the manifest to disk."""
     manifest.updated_at = _utc_now()
@@ -161,6 +176,45 @@ def _save_manifest(run_dir: Path, manifest: MigrationManifest) -> None:
         json.dumps(manifest.to_dict(), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+
+
+def _load_manifest_from_run_dir(run_dir: Path) -> MigrationManifest:
+    """Load an existing manifest directly from a run directory."""
+    manifest_path = _manifest_path(run_dir)
+    if not manifest_path.exists():
+        raise click.ClickException(
+            f"No migration-manifest.json found in {run_dir}."
+        )
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise click.ClickException(
+            f"Failed to parse manifest file {manifest_path}."
+        ) from exc
+
+    try:
+        return MigrationManifest(
+            run_id=data["run_id"],
+            backup_dir=data["backup_dir"],
+            backup_name=data["backup_name"],
+            database=data["database"],
+            retention=data["retention"],
+            all_shards=data.get("all_shards", False),
+            shards=list(data["shards"]),
+            created_at=data["created_at"],
+            updated_at=data["updated_at"],
+            status=data["status"],
+            transform_plan_path=data.get("transform_plan_path"),
+            transform_plan_hash=data.get("transform_plan_hash"),
+            files=[
+                MigrationFileRecord(**record)
+                for record in data.get("files", [])
+            ],
+        )
+    except (KeyError, TypeError) as exc:
+        raise click.ClickException(
+            f"Manifest file {manifest_path} is missing required fields."
+        ) from exc
 
 
 def _load_manifest(
@@ -780,6 +834,11 @@ def _transform_files(
             "Use --force to reapply it."
         )
 
+    manifest.transform_plan_path = str(plan_path)
+    manifest.transform_plan_hash = plan_hash
+    manifest.status = "transforming"
+    _save_manifest(run_dir, manifest)
+
     transformed_count = 0
     for record in manifest.files:
         export_lp_path = Path(record.export_lp_path)
@@ -800,10 +859,9 @@ def _transform_files(
 
         record.transformed_at = _utc_now()
         record.last_error = None
+        _save_manifest(run_dir, manifest)
         transformed_count += 1
 
-    manifest.transform_plan_path = str(plan_path)
-    manifest.transform_plan_hash = plan_hash
     manifest.status = "transformed"
     _save_manifest(run_dir, manifest)
     return transformed_count
@@ -924,6 +982,156 @@ def _import_log_path(run_dir: Path, record: MigrationFileRecord) -> Path:
     return run_dir / "logs" / "import" / f"{record.shard_id}-{file_stem}.log"
 
 
+def _group_records_by_shard(
+    records: list[MigrationFileRecord],
+) -> dict[str, list[MigrationFileRecord]]:
+    """Group manifest file records by shard identifier."""
+    grouped: dict[str, list[MigrationFileRecord]] = {}
+    for record in records:
+        grouped.setdefault(record.shard_id, []).append(record)
+    return grouped
+
+
+def _latest_file_timestamp(record: MigrationFileRecord) -> str | None:
+    """Return the latest known timestamp for a file record."""
+    for value in (
+        record.imported_at,
+        record.transformed_at,
+        record.exported_at,
+        record.discovered_at,
+    ):
+        if value is not None:
+            return value
+    return None
+
+
+def _summarize_shard_progress(
+    records: list[MigrationFileRecord],
+) -> ShardProgress:
+    """Build a shard progress summary from manifest file records."""
+    sorted_records = sorted(
+        records,
+        key=lambda record: Path(record.export_lp_path).name,
+    )
+    file_count = len(sorted_records)
+    exported_count = sum(
+        1 for record in sorted_records if record.exported_at is not None
+    )
+    transformed_count = sum(
+        1 for record in sorted_records if record.transformed_at is not None
+    )
+    imported_count = sum(
+        1 for record in sorted_records if record.imported_at is not None
+    )
+    errors: list[tuple[str, str]] = [
+        (Path(record.export_lp_path).name, record.last_error)
+        for record in sorted_records
+        if record.last_error is not None
+    ]
+    error_count = len(errors)
+    latest_timestamp = max(
+        [
+            timestamp
+            for record in sorted_records
+            if (timestamp := _latest_file_timestamp(record)) is not None
+        ],
+        default=None,
+    )
+
+    if error_count:
+        state = "error"
+    elif imported_count == file_count:
+        state = "imported"
+    elif transformed_count == file_count:
+        state = "transformed"
+    elif exported_count == file_count:
+        state = "exported"
+    elif exported_count == 0:
+        state = "discovered"
+    else:
+        state = "in-progress"
+
+    return ShardProgress(
+        shard_id=sorted_records[0].shard_id,
+        file_count=file_count,
+        exported_count=exported_count,
+        transformed_count=transformed_count,
+        imported_count=imported_count,
+        error_count=error_count,
+        state=state,
+        latest_timestamp=latest_timestamp,
+        errors=errors,
+    )
+
+
+def _render_status_report(manifest: MigrationManifest) -> str:
+    """Render a user-friendly progress report for one run manifest."""
+    grouped_records = _group_records_by_shard(manifest.files)
+    shard_progress = [
+        _summarize_shard_progress(records)
+        for _shard_id, records in sorted(
+            grouped_records.items(),
+            key=lambda item: int(item[0]) if item[0].isdigit() else item[0],
+        )
+    ]
+    total_files = len(manifest.files)
+    total_exported = sum(
+        progress.exported_count for progress in shard_progress
+    )
+    total_transformed = sum(
+        progress.transformed_count for progress in shard_progress
+    )
+    total_imported = sum(
+        progress.imported_count for progress in shard_progress
+    )
+    total_errors = sum(progress.error_count for progress in shard_progress)
+
+    lines = [
+        f"Migration run: {manifest.database} / {manifest.retention}",
+        f"Run ID: {manifest.run_id}",
+        f"Backup: {manifest.backup_name}",
+        f"Mode: {'all-shards' if manifest.all_shards else 'explicit'}",
+        f"Manifest status: {manifest.status}",
+        f"Created: {manifest.created_at}",
+        f"Updated: {manifest.updated_at}",
+        "",
+        "Overall:",
+        f"  Shards: {len(shard_progress)}",
+        f"  Files: {total_files}",
+        f"  Exported: {total_exported}/{total_files}",
+        f"  Transformed: {total_transformed}/{total_files}",
+        f"  Imported: {total_imported}/{total_files}",
+        f"  Error files: {total_errors}",
+        "",
+        "Shard progress:",
+        "  Shard  Files  Exported  Transformed  Imported  State",
+    ]
+    lines.extend(
+        (
+            "  "
+            f"{progress.shard_id:<5}  "
+            f"{progress.file_count}/{progress.file_count:<3}  "
+            f"{progress.exported_count}/{progress.file_count:<3}       "
+            f"{progress.transformed_count}/{progress.file_count:<3}          "
+            f"{progress.imported_count}/{progress.file_count:<3}       "
+            f"{progress.state}"
+        )
+        for progress in shard_progress
+    )
+
+    if total_errors:
+        lines.extend(["", "Errors:"])
+        for progress in shard_progress:
+            if not progress.errors:
+                continue
+            lines.append(f"  Shard {progress.shard_id}")
+            for file_name, error in progress.errors:
+                lines.append(f"    File: {file_name}")
+                lines.append(f"    Error: {error}")
+
+    return "\n".join(lines) + "\n"
+
+
 def _export_files(
     run_dir: Path,
     manifest: MigrationManifest,
@@ -1032,6 +1240,9 @@ def _import_files(
             "No discovered files found in the manifest. Run transform first."
         )
 
+    manifest.status = "importing"
+    _save_manifest(run_dir, manifest)
+
     imported_count = 0
     for record in manifest.files:
         file_path = Path(record.export_lp_path)
@@ -1087,6 +1298,7 @@ def _import_files(
 
         record.imported_at = _utc_now()
         record.last_error = None
+        _save_manifest(run_dir, manifest)
         imported_count += 1
 
     manifest.status = "imported"
@@ -1405,6 +1617,19 @@ def import_command(
     click.echo(f"Imported {imported_count} file(s).")
 
 
+@click.command("status")
+@click.option(
+    "--run-dir",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    required=True,
+    help="Migration run directory containing migration-manifest.json.",
+)
+def status_command(run_dir: Path) -> None:
+    """Report migration progress for a single run directory."""
+    manifest = _load_manifest_from_run_dir(run_dir)
+    click.echo(_render_status_report(manifest), nl=False)
+
+
 @click.group("migrate")
 def migrate() -> None:
     """Migration workflow commands for InfluxDB backups."""
@@ -1414,3 +1639,4 @@ migrate.add_command(discover)
 migrate.add_command(export_command)
 migrate.add_command(transform_command)
 migrate.add_command(import_command)
+migrate.add_command(status_command)
