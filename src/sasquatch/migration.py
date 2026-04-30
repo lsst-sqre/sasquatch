@@ -20,6 +20,8 @@ from .measurements import drop_measurement, rename_measurement
 from .tag_to_field import TagToFieldConflictError, convert_tag_to_field
 from .tags import drop_measurement_tag_key, rename_measurement_tag_key
 
+ALL_SHARDS_SENTINEL = "__all_shards__"
+
 
 def _utc_now() -> str:
     """Return the current UTC timestamp in ISO 8601 format."""
@@ -28,10 +30,29 @@ def _utc_now() -> str:
 
 def _stringify_shards(shards: tuple[str, ...]) -> list[str]:
     """Normalize shard identifiers into non-empty strings."""
-    normalized = [str(shard).strip() for shard in shards if str(shard).strip()]
-    if not normalized:
-        raise click.UsageError("Provide at least one --shard value.")
-    return normalized
+    return [str(shard).strip() for shard in shards if str(shard).strip()]
+
+
+def _resolve_shard_selection(
+    shards: tuple[str, ...],
+    *,
+    all_shards: bool,
+    require_selection: bool,
+    default_all_shards: bool,
+) -> tuple[list[str], bool]:
+    """Resolve shard selection for a migration command."""
+    normalized_shards = _stringify_shards(shards)
+    if all_shards and normalized_shards:
+        raise click.UsageError("Use either --shard or --all-shards, not both.")
+    if all_shards or (default_all_shards and not normalized_shards):
+        return [ALL_SHARDS_SENTINEL], True
+    if normalized_shards:
+        return normalized_shards, False
+    if require_selection:
+        raise click.UsageError(
+            "Provide at least one --shard value or use --all-shards."
+        )
+    raise click.UsageError("Could not determine shard selection.")
 
 
 def _run_id(
@@ -119,6 +140,7 @@ class MigrationManifest:
     backup_name: str
     database: str
     retention: str
+    all_shards: bool
     shards: list[str]
     created_at: str
     updated_at: str
@@ -146,7 +168,9 @@ def _load_manifest(
     backup_dir: Path,
     database: str,
     retention: str,
-    shards: list[str],
+    selection_shards: list[str],
+    *,
+    all_shards: bool,
 ) -> MigrationManifest:
     """Load an existing manifest or initialize a new one."""
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -159,6 +183,7 @@ def _load_manifest(
             backup_name=data["backup_name"],
             database=data["database"],
             retention=data["retention"],
+            all_shards=data.get("all_shards", False),
             shards=list(data["shards"]),
             created_at=data["created_at"],
             updated_at=data["updated_at"],
@@ -175,33 +200,109 @@ def _load_manifest(
             "backup_name": backup_dir.name,
             "database": database,
             "retention": retention,
-            "shards": sorted(shards),
+            "all_shards": all_shards,
         }
         actual = {
             "backup_dir": manifest.backup_dir,
             "backup_name": manifest.backup_name,
             "database": manifest.database,
             "retention": manifest.retention,
-            "shards": sorted(manifest.shards),
+            "all_shards": manifest.all_shards,
         }
         if actual != expected:
             raise click.ClickException(
                 "Existing migration manifest does not match "
                 "the supplied inputs."
             )
+        if not all_shards and sorted(manifest.shards) != sorted(
+            selection_shards
+        ):
+            raise click.ClickException(
+                "Existing migration manifest does not match "
+                "the supplied shard list."
+            )
         return manifest
 
     now = _utc_now()
     return MigrationManifest(
-        run_id=_run_id(backup_dir.name, database, retention, shards),
+        run_id=_run_id(
+            backup_dir.name,
+            database,
+            retention,
+            selection_shards,
+        ),
         backup_dir=str(backup_dir),
         backup_name=backup_dir.name,
         database=database,
         retention=retention,
-        shards=sorted(shards),
+        all_shards=all_shards,
+        shards=[] if all_shards else sorted(selection_shards),
         created_at=now,
         updated_at=now,
         status="initialized",
+    )
+
+
+@dataclass(frozen=True)
+class BackupManifestShard:
+    """One shard entry from a backup manifest."""
+
+    shard_id: str
+    archive_path: Path
+
+
+def _load_backup_manifest(backup_dir: Path) -> list[dict[str, Any]]:
+    """Load the single backup manifest from a backup directory."""
+    manifest_paths = sorted(backup_dir.glob("*.manifest"))
+    if not manifest_paths:
+        raise click.ClickException(
+            f"No backup manifest file found in {backup_dir}."
+        )
+    if len(manifest_paths) > 1:
+        raise click.ClickException(
+            f"Multiple backup manifest files found in {backup_dir}."
+        )
+    data = json.loads(manifest_paths[0].read_text(encoding="utf-8"))
+    files = data.get("files")
+    if not isinstance(files, list):
+        raise click.ClickException(
+            "Backup manifest "
+            f"{manifest_paths[0]} is missing a valid files list."
+        )
+    return [entry for entry in files if isinstance(entry, dict)]
+
+
+def _select_manifest_shards(
+    backup_dir: Path,
+    *,
+    database: str,
+    retention: str,
+) -> list[BackupManifestShard]:
+    """Select candidate shards from the backup manifest."""
+    selected: list[BackupManifestShard] = []
+    for entry in _load_backup_manifest(backup_dir):
+        if entry.get("database") != database:
+            continue
+        if entry.get("policy") != retention:
+            continue
+        shard_id = entry.get("shardID")
+        file_name = entry.get("fileName")
+        if shard_id is None or not isinstance(file_name, str):
+            continue
+        selected.append(
+            BackupManifestShard(
+                shard_id=str(shard_id),
+                archive_path=backup_dir / file_name,
+            )
+        )
+    if not selected:
+        raise click.ClickException(
+            "No shard entries found in the backup manifest for the "
+            "requested database and retention."
+        )
+    return sorted(
+        selected,
+        key=lambda shard: (shard.shard_id, shard.archive_path),
     )
 
 
@@ -221,6 +322,10 @@ def _discover_shard_files(
     expected_prefix = f"{database}/{retention}/{shard_id}/"
 
     for archive_path in _iter_shard_archives(backup_dir, shard_id):
+        if not archive_path.exists():
+            raise click.ClickException(
+                f"Backup shard archive {archive_path} is missing."
+            )
         with tarfile.open(archive_path, "r:gz") as archive:
             for member in archive.getmembers():
                 if not member.isfile():
@@ -234,6 +339,48 @@ def _discover_shard_files(
     return discovered
 
 
+def _discover_manifest_shard_files(
+    manifest_shards: list[BackupManifestShard],
+    *,
+    database: str,
+    retention: str,
+) -> list[tuple[str, Path, str]]:
+    """Discover TSM files for manifest-selected shards."""
+    discovered: list[tuple[str, Path, str]] = []
+    for manifest_shard in manifest_shards:
+        archive_path = manifest_shard.archive_path
+        if not archive_path.exists():
+            raise click.ClickException(
+                f"Backup shard archive {archive_path} is missing."
+            )
+        expected_prefix = f"{database}/{retention}/{manifest_shard.shard_id}/"
+        matching_members: list[str] = []
+        with tarfile.open(archive_path, "r:gz") as archive:
+            for member in archive.getmembers():
+                if not member.isfile():
+                    continue
+                if not member.name.endswith(".tsm"):
+                    continue
+                if not member.name.startswith(expected_prefix):
+                    continue
+                matching_members.append(member.name)
+        if not matching_members:
+            raise click.ClickException(
+                "Backup shard archive "
+                f"{archive_path} does not contain matching TSM files "
+                f"for {database}/{retention}/{manifest_shard.shard_id}."
+            )
+        discovered.extend(
+            (
+                manifest_shard.shard_id,
+                archive_path,
+                member_name,
+            )
+            for member_name in matching_members
+        )
+    return discovered
+
+
 def _discover_files(
     run_dir: Path,
     manifest: MigrationManifest,
@@ -241,20 +388,23 @@ def _discover_files(
 ) -> int:
     """Populate the manifest with discovered shard files."""
     files: list[MigrationFileRecord] = []
-    for shard_id in manifest.shards:
-        discovered = _discover_shard_files(
-            backup_dir,
-            manifest.database,
-            manifest.retention,
-            shard_id,
+    if manifest.all_shards:
+        discovered_entries = _discover_manifest_shard_files(
+            _select_manifest_shards(
+                backup_dir,
+                database=manifest.database,
+                retention=manifest.retention,
+            ),
+            database=manifest.database,
+            retention=manifest.retention,
         )
-        if not discovered:
-            raise click.ClickException(
-                "No TSM files found for shard "
-                f"{shard_id!r} in the backup directory."
-            )
-
-        for archive_path, member_name in discovered:
+        manifest.shards = sorted(
+            {
+                shard_id
+                for shard_id, _archive_path, _member_name in discovered_entries
+            }
+        )
+        for shard_id, archive_path, member_name in discovered_entries:
             tsm_stem = Path(member_name).stem
             files.append(
                 MigrationFileRecord(
@@ -265,6 +415,33 @@ def _discover_files(
                     discovered_at=_utc_now(),
                 )
             )
+    else:
+        for shard_id in manifest.shards:
+            discovered = _discover_shard_files(
+                backup_dir,
+                manifest.database,
+                manifest.retention,
+                shard_id,
+            )
+            if not discovered:
+                raise click.ClickException(
+                    "No TSM files found for shard "
+                    f"{shard_id!r} in the backup directory."
+                )
+
+            for archive_path, member_name in discovered:
+                tsm_stem = Path(member_name).stem
+                files.append(
+                    MigrationFileRecord(
+                        shard_id=shard_id,
+                        archive_path=str(archive_path),
+                        archive_member_path=member_name,
+                        export_lp_path=str(
+                            run_dir / shard_id / f"{tsm_stem}.lp"
+                        ),
+                        discovered_at=_utc_now(),
+                    )
+                )
 
     manifest.files = sorted(
         files,
@@ -925,13 +1102,6 @@ def _common_run_options[F: Callable[..., Any]](function: F) -> F:
         required=True,
         help="Directory to store per-run manifests and migration artifacts.",
     )(function)
-    function = click.option(
-        "--shard",
-        "shards",
-        multiple=True,
-        required=True,
-        help="Shard ID to include. Repeat for multiple shards.",
-    )(function)
     function = click.option("--retention", required=True)(function)
     function = click.option("--database", required=True)(function)
     return click.option(
@@ -941,30 +1111,79 @@ def _common_run_options[F: Callable[..., Any]](function: F) -> F:
     )(function)
 
 
+def _required_shard_selection_options[F: Callable[..., Any]](
+    function: F,
+) -> F:
+    """Add required shard-selection options."""
+    function = click.option(
+        "--all-shards",
+        is_flag=True,
+        help=(
+            "Use all shards from the backup manifest that match "
+            "the database and retention."
+        ),
+    )(function)
+    return click.option(
+        "--shard",
+        "shards",
+        multiple=True,
+        help="Shard ID to include. Repeat for multiple shards.",
+    )(function)
+
+
+def _optional_shard_selection_options[F: Callable[..., Any]](
+    function: F,
+) -> F:
+    """Add optional shard-selection options."""
+    function = click.option(
+        "--all-shards",
+        is_flag=True,
+        help=(
+            "Use all shards from the all-shards migration run. "
+            "This is the default when no shard selection is given."
+        ),
+    )(function)
+    return click.option(
+        "--shard",
+        "shards",
+        multiple=True,
+        help="Shard ID to include. Repeat for multiple shards.",
+    )(function)
+
+
 @click.command("discover")
 @_common_run_options
+@_required_shard_selection_options
 def discover(
     backup_dir: Path,
     database: str,
     retention: str,
     shards: tuple[str, ...],
     work_dir: Path,
+    *,
+    all_shards: bool,
 ) -> None:
     """Discover TSM files for a migration run."""
-    normalized_shards = _stringify_shards(shards)
+    selection_shards, use_all_shards = _resolve_shard_selection(
+        shards,
+        all_shards=all_shards,
+        require_selection=True,
+        default_all_shards=False,
+    )
     run_dir = _run_dir(
         work_dir,
         backup_dir,
         database,
         retention,
-        normalized_shards,
+        selection_shards,
     )
     manifest = _load_manifest(
         run_dir,
         backup_dir,
         database,
         retention,
-        normalized_shards,
+        selection_shards,
+        all_shards=use_all_shards,
     )
     discovered_count = _discover_files(run_dir, manifest, backup_dir)
     click.echo(
@@ -976,6 +1195,7 @@ def discover(
 
 @click.command("export")
 @_common_run_options
+@_required_shard_selection_options
 @click.option(
     "--force",
     is_flag=True,
@@ -988,23 +1208,30 @@ def export_command(
     shards: tuple[str, ...],
     work_dir: Path,
     *,
+    all_shards: bool,
     force: bool,
 ) -> None:
     """Export discovered TSM files to line protocol."""
-    normalized_shards = _stringify_shards(shards)
+    selection_shards, use_all_shards = _resolve_shard_selection(
+        shards,
+        all_shards=all_shards,
+        require_selection=True,
+        default_all_shards=False,
+    )
     run_dir = _run_dir(
         work_dir,
         backup_dir,
         database,
         retention,
-        normalized_shards,
+        selection_shards,
     )
     manifest = _load_manifest(
         run_dir,
         backup_dir,
         database,
         retention,
-        normalized_shards,
+        selection_shards,
+        all_shards=use_all_shards,
     )
     if not manifest.files:
         _discover_files(run_dir, manifest, backup_dir)
@@ -1018,6 +1245,7 @@ def export_command(
 
 @click.command("transform")
 @_common_run_options
+@_optional_shard_selection_options
 @click.option(
     "--plan",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
@@ -1037,23 +1265,30 @@ def transform_command(
     work_dir: Path,
     plan: Path,
     *,
+    all_shards: bool,
     force: bool,
 ) -> None:
     """Transform exported line protocol files in place."""
-    normalized_shards = _stringify_shards(shards)
+    selection_shards, use_all_shards = _resolve_shard_selection(
+        shards,
+        all_shards=all_shards,
+        require_selection=False,
+        default_all_shards=True,
+    )
     run_dir = _run_dir(
         work_dir,
         backup_dir,
         database,
         retention,
-        normalized_shards,
+        selection_shards,
     )
     manifest = _load_manifest(
         run_dir,
         backup_dir,
         database,
         retention,
-        normalized_shards,
+        selection_shards,
+        all_shards=use_all_shards,
     )
     transformed_count = _transform_files(
         run_dir,
@@ -1066,6 +1301,7 @@ def transform_command(
 
 @click.command("import")
 @_common_run_options
+@_optional_shard_selection_options
 @click.option("--host", required=True, help="InfluxDB host name.")
 @click.option("--port", type=int, default=8086, show_default=True)
 @click.option("--username", default=None, help="InfluxDB username.")
@@ -1120,26 +1356,33 @@ def import_command(
     precision: str,
     pps: int,
     *,
+    all_shards: bool,
     compressed: bool,
     ssl: bool,
     unsafe_ssl: bool,
     force: bool,
 ) -> None:
     """Import transformed line protocol files into InfluxDB."""
-    normalized_shards = _stringify_shards(shards)
+    selection_shards, use_all_shards = _resolve_shard_selection(
+        shards,
+        all_shards=all_shards,
+        require_selection=False,
+        default_all_shards=True,
+    )
     run_dir = _run_dir(
         work_dir,
         backup_dir,
         database,
         retention,
-        normalized_shards,
+        selection_shards,
     )
     manifest = _load_manifest(
         run_dir,
         backup_dir,
         database,
         retention,
-        normalized_shards,
+        selection_shards,
+        all_shards=use_all_shards,
     )
     resolved_target_database = target_database or manifest.database
     resolved_target_retention = target_retention or manifest.retention
