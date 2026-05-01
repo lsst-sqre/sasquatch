@@ -321,69 +321,71 @@ def _discover_manifest_shard_files(
     return discovered
 
 
-def _discover_files(
-    run_dir: Path,
-    manifest: MigrationManifest,
+def _discover_entries(
+    *,
     backup_dir: Path,
-) -> int:
-    """Populate the manifest with discovered shard files."""
-    files: list[MigrationFileRecord] = []
-    if manifest.all_shards:
-        discovered_entries = _discover_manifest_shard_files(
+    database: str,
+    retention: str,
+    all_shards: bool,
+    shards: list[str],
+) -> tuple[list[str], list[tuple[str, Path, str]]]:
+    """Validate and collect discovered shard archive members."""
+    if all_shards:
+        manifest_entries = _discover_manifest_shard_files(
             _select_manifest_shards(
                 backup_dir,
-                database=manifest.database,
-                retention=manifest.retention,
+                database=database,
+                retention=retention,
             ),
-            database=manifest.database,
-            retention=manifest.retention,
+            database=database,
+            retention=retention,
         )
-        manifest.shards = sorted(
+        resolved_shards = sorted(
             {
                 shard_id
-                for shard_id, _archive_path, _member_name in discovered_entries
+                for shard_id, _archive_path, _member_name in manifest_entries
             }
         )
-        for shard_id, archive_path, member_name in discovered_entries:
-            tsm_stem = Path(member_name).stem
-            files.append(
-                MigrationFileRecord(
-                    shard_id=shard_id,
-                    archive_path=str(archive_path),
-                    archive_member_path=member_name,
-                    export_lp_path=str(run_dir / shard_id / f"{tsm_stem}.lp"),
-                    discovered_at=_utc_now(),
-                )
-            )
-    else:
-        for shard_id in manifest.shards:
-            discovered = _discover_shard_files(
-                backup_dir,
-                manifest.database,
-                manifest.retention,
-                shard_id,
-            )
-            if not discovered:
-                raise click.ClickException(
-                    "No TSM files found for shard "
-                    f"{shard_id!r} in the backup directory."
-                )
+        return resolved_shards, manifest_entries
 
-            for archive_path, member_name in discovered:
-                tsm_stem = Path(member_name).stem
-                files.append(
-                    MigrationFileRecord(
-                        shard_id=shard_id,
-                        archive_path=str(archive_path),
-                        archive_member_path=member_name,
-                        export_lp_path=str(
-                            run_dir / shard_id / f"{tsm_stem}.lp"
-                        ),
-                        discovered_at=_utc_now(),
-                    )
-                )
+    discovered_entries: list[tuple[str, Path, str]] = []
+    for shard_id in shards:
+        discovered = _discover_shard_files(
+            backup_dir,
+            database,
+            retention,
+            shard_id,
+        )
+        if not discovered:
+            raise click.ClickException(
+                "No TSM files found for shard "
+                f"{shard_id!r} in the backup directory."
+            )
+        discovered_entries.extend(
+            (shard_id, archive_path, member_name)
+            for archive_path, member_name in discovered
+        )
+    return sorted(shards), discovered_entries
 
-    manifest.files = sorted(
+
+def _build_discovered_records(
+    run_dir: Path,
+    discovered_entries: list[tuple[str, Path, str]],
+) -> list[MigrationFileRecord]:
+    """Build manifest file records from discovered archive members."""
+    files = []
+    for shard_id, archive_path, member_name in discovered_entries:
+        tsm_stem = Path(member_name).stem
+        files.append(
+            MigrationFileRecord(
+                shard_id=shard_id,
+                archive_path=str(archive_path),
+                archive_member_path=member_name,
+                export_lp_path=str(run_dir / shard_id / f"{tsm_stem}.lp"),
+                discovered_at=_utc_now(),
+            )
+        )
+    return sorted(
         files,
         key=lambda record: (
             record.shard_id,
@@ -391,6 +393,17 @@ def _discover_files(
             record.archive_member_path,
         ),
     )
+
+
+def _discover_files(
+    run_dir: Path,
+    manifest: MigrationManifest,
+    discovered_entries: list[tuple[str, Path, str]],
+    resolved_shards: list[str],
+) -> int:
+    """Populate the manifest with already-discovered shard files."""
+    manifest.shards = resolved_shards
+    manifest.files = _build_discovered_records(run_dir, discovered_entries)
     manifest.status = "discovered"
     _save_manifest(run_dir, manifest)
     return len(manifest.files)
@@ -1229,26 +1242,6 @@ def _required_shard_selection_options[F: Callable[..., Any]](
     )(function)
 
 
-def _optional_shard_selection_options[F: Callable[..., Any]](
-    function: F,
-) -> F:
-    """Add optional shard-selection options."""
-    function = click.option(
-        "--all-shards",
-        is_flag=True,
-        help=(
-            "Use all shards from the all-shards migration run. "
-            "This is the default when no shard selection is given."
-        ),
-    )(function)
-    return click.option(
-        "--shard",
-        "shards",
-        multiple=True,
-        help="Shard ID to include. Repeat for multiple shards.",
-    )(function)
-
-
 def _run_dir_option[F: Callable[..., Any]](function: F) -> F:
     """Add a required migration run directory option."""
     return click.option(
@@ -1278,6 +1271,13 @@ def discover(
         require_selection=True,
         default_all_shards=False,
     )
+    resolved_shards, discovered_entries = _discover_entries(
+        backup_dir=backup_dir,
+        database=database,
+        retention=retention,
+        all_shards=use_all_shards,
+        shards=selection_shards,
+    )
     if run_dir.exists():
         raise click.ClickException(f"Run directory {run_dir} already exists.")
     run_dir.mkdir(parents=True, exist_ok=False)
@@ -1294,12 +1294,17 @@ def discover(
         database=database,
         retention=retention,
         all_shards=use_all_shards,
-        shards=[] if use_all_shards else sorted(selection_shards),
+        shards=[] if use_all_shards else resolved_shards,
         created_at=now,
         updated_at=now,
         status="initialized",
     )
-    discovered_count = _discover_files(run_dir, manifest, backup_dir)
+    discovered_count = _discover_files(
+        run_dir,
+        manifest,
+        discovered_entries,
+        resolved_shards,
+    )
     click.echo(
         "Discovered "
         f"{discovered_count} TSM file(s) in "

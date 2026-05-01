@@ -314,6 +314,7 @@ def test_migrate_discover_rejects_missing_shard(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "No TSM files found for shard '998'" in result.output
+    assert not run_dir.exists()
 
 
 def test_migrate_discover_all_shards_uses_backup_manifest(
@@ -381,6 +382,7 @@ def test_migrate_discover_all_shards_requires_backup_manifest(
 
     assert result.exit_code != 0
     assert "No backup manifest file found" in result.output
+    assert not run_dir.exists()
 
 
 def test_migrate_discover_all_shards_rejects_multiple_manifests(
@@ -413,6 +415,7 @@ def test_migrate_discover_all_shards_rejects_multiple_manifests(
 
     assert result.exit_code != 0
     assert "Multiple backup manifest files found" in result.output
+    assert not run_dir.exists()
 
 
 def test_migrate_discover_all_shards_rejects_no_matching_manifest_entries(
@@ -443,6 +446,7 @@ def test_migrate_discover_all_shards_rejects_no_matching_manifest_entries(
 
     assert result.exit_code != 0
     assert "No shard entries found in the backup manifest" in result.output
+    assert not run_dir.exists()
 
 
 def test_migrate_discover_all_shards_rejects_missing_archive(
@@ -475,6 +479,7 @@ def test_migrate_discover_all_shards_rejects_missing_archive(
     assert result.exit_code != 0
     assert "Backup shard archive" in result.output
     assert "is missing." in result.output
+    assert not run_dir.exists()
 
 
 def test_migrate_discover_all_shards_rejects_archive_without_matching_tsm(
@@ -516,6 +521,7 @@ def test_migrate_discover_all_shards_rejects_archive_without_matching_tsm(
 
     assert result.exit_code != 0
     assert "does not contain matching TSM files" in result.output
+    assert not run_dir.exists()
 
 
 def test_migrate_discover_rejects_mixed_shard_selection(
