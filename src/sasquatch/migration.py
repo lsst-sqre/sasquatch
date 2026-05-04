@@ -814,6 +814,64 @@ def _rewrite_import_context(
     return None
 
 
+def _read_context_database(file_path: Path) -> str:
+    """Read the effective CONTEXT-DATABASE value from a line protocol file."""
+    for line in file_path.read_text(encoding="utf-8").splitlines():
+        if not line.startswith("# CONTEXT-DATABASE:"):
+            continue
+        database = line.split(":", 1)[1].strip()
+        if database:
+            return database
+        break
+    raise click.ClickException(
+        f"Line protocol file {file_path} is missing a CONTEXT-DATABASE header."
+    )
+
+
+def _extend_influx_connection_argv(
+    argv: list[str],
+    *,
+    host: str,
+    port: int,
+    username: str | None,
+    password: str | None,
+    ssl: bool,
+    unsafe_ssl: bool,
+) -> list[str]:
+    """Append shared InfluxDB CLI connection options."""
+    argv.extend(["-host", host, "-port", str(port)])
+    if username is not None:
+        argv.extend(["-username", username])
+    if password is not None:
+        argv.extend(["-password", password])
+    if ssl:
+        argv.append("-ssl")
+    if unsafe_ssl:
+        argv.append("-unsafeSsl")
+    return argv
+
+
+def _build_show_databases_argv(
+    *,
+    host: str,
+    port: int,
+    username: str | None,
+    password: str | None,
+    ssl: bool,
+    unsafe_ssl: bool,
+) -> list[str]:
+    """Build the influx CLI argv for SHOW DATABASES."""
+    return _extend_influx_connection_argv(
+        ["influx", "-execute", "SHOW DATABASES"],
+        host=host,
+        port=port,
+        username=username,
+        password=password,
+        ssl=ssl,
+        unsafe_ssl=unsafe_ssl,
+    )
+
+
 def _build_import_argv(
     *,
     file_path: Path,
@@ -828,31 +886,63 @@ def _build_import_argv(
     unsafe_ssl: bool,
 ) -> list[str]:
     """Build the influx CLI argv for one file import."""
-    argv = [
-        "influx",
-        "-host",
-        host,
-        "-port",
-        str(port),
-        "-import",
-        "-path",
-        str(file_path),
-        "-precision",
-        precision,
-    ]
-    if username is not None:
-        argv.extend(["-username", username])
-    if password is not None:
-        argv.extend(["-password", password])
+    argv = _extend_influx_connection_argv(
+        [
+            "influx",
+            "-import",
+            "-path",
+            str(file_path),
+            "-precision",
+            precision,
+        ],
+        host=host,
+        port=port,
+        username=username,
+        password=password,
+        ssl=ssl,
+        unsafe_ssl=unsafe_ssl,
+    )
     if pps:
         argv.extend(["-pps", str(pps)])
     if compressed:
         argv.append("-compressed")
-    if ssl:
-        argv.append("-ssl")
-    if unsafe_ssl:
-        argv.append("-unsafeSsl")
     return argv
+
+
+def _database_exists(
+    database: str,
+    *,
+    host: str,
+    port: int,
+    username: str | None,
+    password: str | None,
+    ssl: bool,
+    unsafe_ssl: bool,
+) -> bool:
+    """Return whether one database exists in the target InfluxDB instance."""
+    argv = _build_show_databases_argv(
+        host=host,
+        port=port,
+        username=username,
+        password=password,
+        ssl=ssl,
+        unsafe_ssl=unsafe_ssl,
+    )
+    result = _run_external_command(argv)
+    if result.returncode != 0:
+        message = result.stderr.strip() or result.stdout.strip()
+        failure_message = message or "SHOW DATABASES failed."
+        raise click.ClickException(
+            f"Failed to list databases in InfluxDB: {failure_message}"
+        )
+
+    database_lines = {
+        line.strip()
+        for line in result.stdout.splitlines()
+        if line.strip() and not line.startswith("name:")
+    }
+    database_lines.discard("name")
+    return database in database_lines
 
 
 def _emit_import_context_message(
@@ -1143,6 +1233,7 @@ def _import_files(
     _save_manifest(run_dir, manifest)
 
     imported_count = 0
+    database_exists_cache: dict[str, bool] = {}
     for record in manifest.files:
         file_path = Path(record.export_lp_path)
         if not file_path.exists():
@@ -1168,6 +1259,32 @@ def _import_files(
             database=target_database,
             retention=target_retention,
         )
+        context_database = _read_context_database(file_path)
+        try:
+            database_exists = database_exists_cache.get(context_database)
+            if database_exists is None:
+                database_exists = _database_exists(
+                    context_database,
+                    host=host,
+                    port=port,
+                    username=username,
+                    password=password,
+                    ssl=ssl,
+                    unsafe_ssl=unsafe_ssl,
+                )
+                database_exists_cache[context_database] = database_exists
+        except click.ClickException as exc:
+            record.last_error = str(exc)
+            _save_manifest(run_dir, manifest)
+            raise
+        if not database_exists:
+            record.last_error = (
+                f'Database "{context_database}" does not exist in InfluxDB. '
+                "Create it before running import."
+            )
+            _save_manifest(run_dir, manifest)
+            raise click.ClickException(record.last_error)
+
         argv = _build_import_argv(
             file_path=file_path,
             host=host,

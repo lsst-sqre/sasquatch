@@ -208,6 +208,11 @@ def _discover_source_run(
     assert result.exit_code == 0
 
 
+def _show_databases_output(*databases: str) -> str:
+    """Build a simple influx SHOW DATABASES response body."""
+    return "name: databases\nname\n" + "\n".join(databases) + "\n"
+
+
 def test_migrate_discover_creates_manifest(tmp_path: Path) -> None:
     """Discover should create a manifest from shard archives."""
     backup_dir = _create_backup_tree(tmp_path)
@@ -1462,6 +1467,14 @@ def test_migrate_import_updates_manifest_and_rewrites_headers(
     ) -> subprocess.CompletedProcess[str]:
         assert argv[0] == "influx"
         assert "-host" in argv
+        if "-execute" in argv:
+            assert argv[argv.index("-execute") + 1] == "SHOW DATABASES"
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                _show_databases_output("target.metrics"),
+                "",
+            )
         assert "-import" in argv
         return subprocess.CompletedProcess(argv, 0, "imported", "")
 
@@ -1515,6 +1528,13 @@ def test_migrate_import_adds_missing_headers_and_reports_it(
         check: bool,
         text: bool,
     ) -> subprocess.CompletedProcess[str]:
+        if "-execute" in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                _show_databases_output("target.metrics"),
+                "",
+            )
         return subprocess.CompletedProcess(argv, 0, "imported", "")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -1545,6 +1565,70 @@ def test_migrate_import_adds_missing_headers_and_reports_it(
     )
 
 
+def test_migrate_import_requires_existing_target_database(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Import should fail before -import when the target database is absent."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    runner = CliRunner()
+    _discover_source_run(runner, backup_dir, work_dir)
+    run_dir = _manifest_run_dir(work_dir)
+    _write_exported_lp(work_dir, "weather temp=82\n")
+    _mark_transformed(work_dir)
+
+    calls: list[list[str]] = []
+
+    def fake_run(
+        argv: list[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(argv)
+        if "-execute" in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                _show_databases_output("_internal"),
+                "",
+            )
+        pytest.fail(
+            "import should not run when the target database is missing"
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "import",
+            "--run-dir",
+            str(run_dir),
+            "--host",
+            "influxdb.example.org",
+            "--target-database",
+            "target.metrics",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert (
+        'Database "target.metrics" does not exist in InfluxDB. '
+        "Create it before running import."
+    ) in result.output
+    manifest = _read_manifest(work_dir)
+    assert manifest["files"][0]["last_error"] == (
+        'Database "target.metrics" does not exist in InfluxDB. '
+        "Create it before running import."
+    )
+    assert len(calls) == 1
+    assert "-execute" in calls[0]
+
+
 def test_migrate_import_is_quiet_when_headers_already_match(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1571,6 +1655,13 @@ def test_migrate_import_is_quiet_when_headers_already_match(
         check: bool,
         text: bool,
     ) -> subprocess.CompletedProcess[str]:
+        if "-execute" in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                _show_databases_output("target.metrics"),
+                "",
+            )
         return subprocess.CompletedProcess(argv, 0, "imported", "")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -1593,6 +1684,84 @@ def test_migrate_import_is_quiet_when_headers_already_match(
 
     assert result.exit_code == 0
     assert result.output == "Imported 1 file(s).\n"
+
+
+def test_migrate_import_checks_database_with_same_connection_options(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Import should use the same connection flags for SHOW DATABASES."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    runner = CliRunner()
+    _discover_source_run(runner, backup_dir, work_dir)
+    run_dir = _manifest_run_dir(work_dir)
+    _write_exported_lp(work_dir, "weather temp=82\n")
+    _mark_transformed(work_dir)
+
+    execute_argv: list[str] | None = None
+    import_argv: list[str] | None = None
+
+    def fake_run(
+        argv: list[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        nonlocal execute_argv, import_argv
+        if "-execute" in argv:
+            execute_argv = argv
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                _show_databases_output("target.metrics"),
+                "",
+            )
+        import_argv = argv
+        return subprocess.CompletedProcess(argv, 0, "imported", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "import",
+            "--run-dir",
+            str(run_dir),
+            "--host",
+            "influxdb.example.org",
+            "--port",
+            "8443",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+            "--ssl",
+            "--unsafe-ssl",
+            "--target-database",
+            "target.metrics",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert execute_argv is not None
+    assert import_argv is not None
+    for flag, value in (
+        ("-host", "influxdb.example.org"),
+        ("-port", "8443"),
+        ("-username", "alice"),
+        ("-password", "secret"),
+    ):
+        assert flag in execute_argv
+        assert execute_argv[execute_argv.index(flag) + 1] == value
+        assert flag in import_argv
+        assert import_argv[import_argv.index(flag) + 1] == value
+    assert "-ssl" in execute_argv
+    assert "-unsafeSsl" in execute_argv
+    assert "-ssl" in import_argv
+    assert "-unsafeSsl" in import_argv
 
 
 def test_migrate_import_skips_already_imported_without_force(
@@ -1626,6 +1795,13 @@ def test_migrate_import_skips_already_imported_without_force(
     ) -> subprocess.CompletedProcess[str]:
         nonlocal calls
         calls += 1
+        if "-execute" in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                _show_databases_output("lsst.square.metrics"),
+                "",
+            )
         return subprocess.CompletedProcess(argv, 0, "imported", "")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -1645,6 +1821,83 @@ def test_migrate_import_skips_already_imported_without_force(
     assert result.exit_code == 0
     assert result.output == "Imported 0 file(s).\n"
     assert calls == 0
+
+
+def test_migrate_import_checks_repeated_database_only_once(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Import should cache database existence checks within one run."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    runner = CliRunner()
+    discover_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--all-shards",
+            "--run-dir",
+            str(work_dir),
+        ],
+    )
+    assert discover_result.exit_code == 0
+    run_dir = _manifest_run_dir(work_dir)
+    _write_all_exported_lp(
+        work_dir,
+        {
+            "975": "weather temp=82\n",
+            "986": "cpu value=1i\n",
+        },
+    )
+    _mark_transformed(work_dir)
+
+    show_database_calls = 0
+    import_calls = 0
+
+    def fake_run(
+        argv: list[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        nonlocal show_database_calls, import_calls
+        if "-execute" in argv:
+            show_database_calls += 1
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                _show_databases_output("lsst.square.metrics"),
+                "",
+            )
+        import_calls += 1
+        return subprocess.CompletedProcess(argv, 0, "imported", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "import",
+            "--run-dir",
+            str(run_dir),
+            "--host",
+            "influxdb.example.org",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert show_database_calls == 1
+    assert import_calls == 2
 
 
 def test_migrate_import_requires_transformed_file(tmp_path: Path) -> None:
@@ -1693,6 +1946,13 @@ def test_migrate_import_records_subprocess_failure(
         check: bool,
         text: bool,
     ) -> subprocess.CompletedProcess[str]:
+        if "-execute" in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                _show_databases_output("lsst.square.metrics"),
+                "",
+            )
         return subprocess.CompletedProcess(argv, 1, "", "boom")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -1712,6 +1972,55 @@ def test_migrate_import_records_subprocess_failure(
     assert result.exit_code != 0
     manifest = _read_manifest(work_dir)
     assert manifest["files"][0]["last_error"] == "boom"
+
+
+def test_migrate_import_reports_show_databases_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Import should surface SHOW DATABASES failures before importing."""
+    backup_dir = _create_backup_tree(tmp_path)
+    work_dir = tmp_path / "work"
+    runner = CliRunner()
+    _discover_source_run(runner, backup_dir, work_dir)
+    run_dir = _manifest_run_dir(work_dir)
+    _write_exported_lp(work_dir, "weather temp=82\n")
+    _mark_transformed(work_dir)
+
+    def fake_run(
+        argv: list[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        if "-execute" in argv:
+            return subprocess.CompletedProcess(argv, 1, "", "cannot connect")
+        pytest.fail("import should not run when SHOW DATABASES fails")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "import",
+            "--run-dir",
+            str(run_dir),
+            "--host",
+            "influxdb.example.org",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert (
+        "Failed to list databases in InfluxDB: cannot connect" in result.output
+    )
+    manifest = _read_manifest(work_dir)
+    assert (
+        manifest["files"][0]["last_error"]
+        == "Failed to list databases in InfluxDB: cannot connect"
+    )
 
 
 def test_migrate_import_saves_progress_after_each_file(
@@ -1760,6 +2069,13 @@ def test_migrate_import_saves_progress_after_each_file(
         text: bool,
     ) -> subprocess.CompletedProcess[str]:
         nonlocal calls
+        if "-execute" in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                _show_databases_output("lsst.square.metrics"),
+                "",
+            )
         calls += 1
         if calls == 1:
             return subprocess.CompletedProcess(argv, 0, "imported", "")
@@ -1836,6 +2152,13 @@ def test_migrate_import_defaults_to_all_shards(
         text: bool,
     ) -> subprocess.CompletedProcess[str]:
         calls.append(argv)
+        if "-execute" in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                _show_databases_output("lsst.square.metrics"),
+                "",
+            )
         return subprocess.CompletedProcess(argv, 0, "imported", "")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -1858,7 +2181,7 @@ def test_migrate_import_defaults_to_all_shards(
         "database=lsst.square.metrics, retention=autogen.\n"
         "Imported 2 file(s).\n"
     )
-    assert len(calls) == 2
+    assert len(calls) == 3
 
 
 def test_migrate_import_requires_run_dir_manifest(tmp_path: Path) -> None:
