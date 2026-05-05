@@ -1,5 +1,7 @@
 from documenteer.conf.guide import *  # noqa
 
+extensions.append("sphinx_click")
+
 exclude_patterns = ["_rst_epilog.rst", "**.ipynb"]
 nb_execution_mode = "off"
 
