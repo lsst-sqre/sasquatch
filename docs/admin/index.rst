@@ -22,6 +22,7 @@ A Sasquatch administrator is responsible for maintaining the Sasquatch component
    managing-shards
    adding-subcharts
    backups
+   influxdb-migration
    monitoring
    query-limits
    license
