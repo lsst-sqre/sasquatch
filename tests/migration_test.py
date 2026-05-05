@@ -239,7 +239,9 @@ def test_migrate_discover_creates_manifest(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0
-    assert result.output == "Discovered 1 TSM file(s) in 1 shard(s).\n"
+    assert result.output == (
+        "Running discover...\nDiscovered 1 TSM file(s) in 1 shard(s).\n"
+    )
 
     manifest = _read_manifest(run_dir)
     assert manifest["database"] == "lsst.square.metrics"
@@ -278,7 +280,11 @@ def test_migrate_discover_rejects_existing_run_dir(tmp_path: Path) -> None:
     )
 
     assert result.exit_code != 0
-    assert f"Run directory {run_dir} already exists." in result.output
+    assert result.output == (
+        "Running discover...\n"
+        f"Error: Run directory {run_dir} already exists.\n"
+        f"Error: Run directory {run_dir} already exists.\n"
+    )
 
 
 def test_influxdb_help_shows_line_protocol_and_migrate_groups() -> None:
@@ -318,7 +324,11 @@ def test_migrate_discover_rejects_missing_shard(tmp_path: Path) -> None:
     )
 
     assert result.exit_code != 0
-    assert "No TSM files found for shard '998'" in result.output
+    assert result.output == (
+        "Running discover...\n"
+        "Error: No TSM files found for shard '998' in the backup directory.\n"
+        "Error: No TSM files found for shard '998' in the backup directory.\n"
+    )
     assert not run_dir.exists()
 
 
@@ -349,7 +359,9 @@ def test_migrate_discover_all_shards_uses_backup_manifest(
     )
 
     assert result.exit_code == 0
-    assert result.output == "Discovered 2 TSM file(s) in 2 shard(s).\n"
+    assert result.output == (
+        "Running discover...\nDiscovered 2 TSM file(s) in 2 shard(s).\n"
+    )
     manifest = _read_manifest(run_dir)
     assert manifest["all_shards"] is True
     assert manifest["shards"] == ["975", "986"]
@@ -386,7 +398,11 @@ def test_migrate_discover_all_shards_requires_backup_manifest(
     )
 
     assert result.exit_code != 0
-    assert "No backup manifest file found" in result.output
+    assert (
+        "Running discover...\n"
+        f"Error: No backup manifest file found in {backup_dir}.\n"
+        f"Error: No backup manifest file found in {backup_dir}.\n"
+    ) == result.output
     assert not run_dir.exists()
 
 
@@ -607,7 +623,9 @@ def test_migrate_discover_real_sample_data(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0
-    assert result.output == "Discovered 1 TSM file(s) in 1 shard(s).\n"
+    assert result.output == (
+        "Running discover...\nDiscovered 1 TSM file(s) in 1 shard(s).\n"
+    )
 
     manifest = _read_manifest(run_dir)
     assert manifest["shards"] == ["975"]
@@ -683,7 +701,7 @@ def test_migrate_export_updates_manifest_and_writes_lp(
     )
 
     assert export_result.exit_code == 0
-    assert export_result.output == "Exported 1 file(s).\n"
+    assert export_result.output == ("Running export...\nExported 1 file(s).\n")
 
     manifest = _read_manifest(run_dir)
     assert manifest["status"] == "exported"
@@ -714,7 +732,11 @@ def test_migrate_export_requires_existing_run_dir(tmp_path: Path) -> None:
     )
 
     assert result.exit_code != 0
-    assert "No migration-manifest.json found" in result.output
+    assert result.output == (
+        "Running export...\n"
+        f"Error: No migration-manifest.json found in {run_dir}.\n"
+        f"Error: No migration-manifest.json found in {run_dir}.\n"
+    )
 
 
 def test_migrate_export_requires_manifest(tmp_path: Path) -> None:
@@ -735,7 +757,11 @@ def test_migrate_export_requires_manifest(tmp_path: Path) -> None:
     )
 
     assert result.exit_code != 0
-    assert "No migration-manifest.json found" in result.output
+    assert result.output == (
+        "Running export...\n"
+        f"Error: No migration-manifest.json found in {run_dir}.\n"
+        f"Error: No migration-manifest.json found in {run_dir}.\n"
+    )
 
 
 def test_migrate_export_requires_discovered_files(tmp_path: Path) -> None:
@@ -773,9 +799,12 @@ def test_migrate_export_requires_discovered_files(tmp_path: Path) -> None:
     )
 
     assert result.exit_code != 0
-    assert (
-        "No discovered files found in the manifest. Run discover first."
-        in result.output
+    assert result.output == (
+        "Running export...\n"
+        "Error: No discovered files found in the manifest. "
+        "Run discover first.\n"
+        "Error: No discovered files found in the manifest. "
+        "Run discover first.\n"
     )
 
 
@@ -851,7 +880,9 @@ def test_migrate_transform_updates_manifest_and_rewrites_lp(
     )
 
     assert transform_result.exit_code == 0
-    assert transform_result.output == "Transformed 1 file(s).\n"
+    assert transform_result.output == (
+        "Running transform...\nTransformed 1 file(s).\n"
+    )
     assert export_lp_path.read_text(encoding="utf-8") == "weather temp=82\n"
 
     manifest = _read_manifest(work_dir)
@@ -927,7 +958,9 @@ def test_migrate_transform_skips_already_transformed_files(
     )
 
     assert second_result.exit_code == 0
-    assert second_result.output == "Transformed 0 file(s).\n"
+    assert second_result.output == (
+        "Running transform...\nTransformed 0 file(s).\n"
+    )
     assert export_lp_path.read_text(encoding="utf-8") == "weather temp=82\n"
 
 
@@ -1048,9 +1081,11 @@ def test_migrate_transform_rejects_invalid_plan_extension(
     )
 
     assert result.exit_code != 0
-    assert (
-        "Transform plan must use a .yaml or .yml extension." in result.output
+    assert result.output.startswith(
+        "Running transform...\n"
+        "Error: Transform plan must use a .yaml or .yml extension.\n"
     )
+    assert "Usage: main influxdb migrate transform [OPTIONS]" in result.output
 
 
 def test_migrate_transform_rejects_unknown_operation(tmp_path: Path) -> None:
@@ -1099,7 +1134,11 @@ def test_migrate_transform_rejects_unknown_operation(tmp_path: Path) -> None:
     )
 
     assert result.exit_code != 0
-    assert "Unknown transform operation 'surprise'." in result.output
+    assert result.output == (
+        "Running transform...\n"
+        "Error: Unknown transform operation 'surprise'.\n"
+        "Error: Unknown transform operation 'surprise'.\n"
+    )
 
 
 def test_migrate_transform_requires_exported_file(tmp_path: Path) -> None:
@@ -1147,7 +1186,15 @@ def test_migrate_transform_requires_exported_file(tmp_path: Path) -> None:
     )
 
     assert result.exit_code != 0
-    assert "is missing. Run export first." in result.output
+    file_record = _read_manifest(work_dir)["files"][0]
+    export_lp_path = Path(file_record["export_lp_path"])
+    assert result.output == (
+        "Running transform...\n"
+        f"Error: Exported file {export_lp_path} "
+        "is missing. Run export first.\n"
+        f"Error: Exported file {export_lp_path} "
+        "is missing. Run export first.\n"
+    )
 
 
 def test_migrate_transform_rejects_changed_plan_without_force(
@@ -1217,8 +1264,12 @@ def test_migrate_transform_rejects_changed_plan_without_force(
     )
 
     assert second_result.exit_code != 0
-    assert (
-        "Transform plan changed for an existing run." in second_result.output
+    assert second_result.output == (
+        "Running transform...\n"
+        "Error: Transform plan changed for an existing run. "
+        "Use --force to reapply it.\n"
+        "Error: Transform plan changed for an existing run. "
+        "Use --force to reapply it.\n"
     )
 
 
@@ -1390,7 +1441,7 @@ def test_migrate_transform_defaults_to_all_shards(
     )
 
     assert result.exit_code == 0
-    assert result.output == "Transformed 2 file(s).\n"
+    assert result.output == ("Running transform...\nTransformed 2 file(s).\n")
     assert file_paths["975"].read_text(encoding="utf-8") == "weather temp=82\n"
     assert file_paths["986"].read_text(encoding="utf-8") == "cpu value=1i\n"
 
@@ -1417,7 +1468,11 @@ def test_migrate_transform_requires_run_dir_manifest(tmp_path: Path) -> None:
     )
 
     assert result.exit_code != 0
-    assert "No migration-manifest.json found" in result.output
+    assert result.output == (
+        "Running transform...\n"
+        f"Error: No migration-manifest.json found in {run_dir}.\n"
+        f"Error: No migration-manifest.json found in {run_dir}.\n"
+    )
 
 
 def test_migrate_transform_help_uses_run_dir_only() -> None:
@@ -1497,6 +1552,7 @@ def test_migrate_import_updates_manifest_and_rewrites_headers(
     )
 
     assert result.exit_code == 0
+    assert result.output.startswith("Running import...\n")
     assert "Updated import headers in" in result.output
     assert "Imported 1 file(s)." in result.output
     content = file_path.read_text(encoding="utf-8")
@@ -1556,6 +1612,7 @@ def test_migrate_import_adds_missing_headers_and_reports_it(
     )
 
     assert result.exit_code == 0
+    assert result.output.startswith("Running import...\n")
     assert "Added import headers to" in result.output
     content = file_path.read_text(encoding="utf-8")
     assert content.startswith(
@@ -1616,9 +1673,11 @@ def test_migrate_import_requires_existing_target_database(
     )
 
     assert result.exit_code != 0
+    assert result.output.startswith("Running import...\n")
+    assert "Added import headers to" in result.output
     assert (
-        'Database "target.metrics" does not exist in InfluxDB. '
-        "Create it before running import."
+        'Error: Database "target.metrics" does not exist in InfluxDB. '
+        "Create it before running import.\n"
     ) in result.output
     manifest = _read_manifest(work_dir)
     assert manifest["files"][0]["last_error"] == (
@@ -1683,7 +1742,7 @@ def test_migrate_import_is_quiet_when_headers_already_match(
     )
 
     assert result.exit_code == 0
-    assert result.output == "Imported 1 file(s).\n"
+    assert result.output == "Running import...\nImported 1 file(s).\n"
 
 
 def test_migrate_import_checks_database_with_same_connection_options(
@@ -1819,7 +1878,7 @@ def test_migrate_import_skips_already_imported_without_force(
     )
 
     assert result.exit_code == 0
-    assert result.output == "Imported 0 file(s).\n"
+    assert result.output == "Running import...\nImported 0 file(s).\n"
     assert calls == 0
 
 
@@ -1923,7 +1982,15 @@ def test_migrate_import_requires_transformed_file(tmp_path: Path) -> None:
     )
 
     assert result.exit_code != 0
-    assert "has not been transformed. Run transform first." in result.output
+    manifest = _read_manifest(work_dir)
+    file_path = Path(manifest["files"][0]["export_lp_path"])
+    assert result.output == (
+        "Running import...\n"
+        f"Error: File {file_path} has not been transformed. "
+        "Run transform first.\n"
+        f"Error: File {file_path} has not been transformed. "
+        "Run transform first.\n"
+    )
 
 
 def test_migrate_import_records_subprocess_failure(
@@ -1936,7 +2003,7 @@ def test_migrate_import_records_subprocess_failure(
     runner = CliRunner()
     _discover_source_run(runner, backup_dir, work_dir)
     run_dir = _manifest_run_dir(work_dir)
-    _write_exported_lp(work_dir, "weather temp=82\n")
+    file_path = _write_exported_lp(work_dir, "weather temp=82\n")
     _mark_transformed(work_dir)
 
     def fake_run(
@@ -1970,6 +2037,9 @@ def test_migrate_import_records_subprocess_failure(
     )
 
     assert result.exit_code != 0
+    assert result.output.startswith("Running import...\n")
+    assert "Added import headers to" in result.output
+    assert (f"Error: Failed to import {file_path}: boom\n") in result.output
     manifest = _read_manifest(work_dir)
     assert manifest["files"][0]["last_error"] == "boom"
 
@@ -2177,6 +2247,7 @@ def test_migrate_import_defaults_to_all_shards(
 
     assert result.exit_code == 0
     assert result.output == (
+        "Running import...\n"
         f"Added import headers to {file_paths['975']} for "
         "database=lsst.square.metrics, retention=autogen.\n"
         "Imported 2 file(s).\n"
@@ -2204,7 +2275,11 @@ def test_migrate_import_requires_run_dir_manifest(tmp_path: Path) -> None:
     )
 
     assert result.exit_code != 0
-    assert "No migration-manifest.json found" in result.output
+    assert result.output == (
+        "Running import...\n"
+        f"Error: No migration-manifest.json found in {run_dir}.\n"
+        f"Error: No migration-manifest.json found in {run_dir}.\n"
+    )
 
 
 def test_migrate_import_help_uses_run_dir_only() -> None:

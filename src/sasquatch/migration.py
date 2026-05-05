@@ -183,6 +183,16 @@ def _load_manifest_from_run_dir(run_dir: Path) -> MigrationManifest:
         ) from exc
 
 
+def _run_phase(name: str, operation: Callable[[], None]) -> None:
+    """Run one migration phase with stdout progress and error output."""
+    click.echo(f"Running {name}...")
+    try:
+        operation()
+    except click.ClickException as exc:
+        click.echo(f"Error: {exc.message}")
+        raise
+
+
 @dataclass(frozen=True)
 class BackupManifestShard:
     """One shard entry from a backup manifest."""
@@ -1382,51 +1392,57 @@ def discover(
     all_shards: bool,
 ) -> None:
     """Discover TSM files for a migration run."""
-    selection_shards, use_all_shards = _resolve_shard_selection(
-        shards,
-        all_shards=all_shards,
-        require_selection=True,
-        default_all_shards=False,
-    )
-    resolved_shards, discovered_entries = _discover_entries(
-        backup_dir=backup_dir,
-        database=database,
-        retention=retention,
-        all_shards=use_all_shards,
-        shards=selection_shards,
-    )
-    if run_dir.exists():
-        raise click.ClickException(f"Run directory {run_dir} already exists.")
-    run_dir.mkdir(parents=True, exist_ok=False)
-    now = _utc_now()
-    manifest = MigrationManifest(
-        run_id=_run_id(
-            backup_dir.name,
-            database,
-            retention,
-            selection_shards,
-        ),
-        backup_dir=str(backup_dir),
-        backup_name=backup_dir.name,
-        database=database,
-        retention=retention,
-        all_shards=use_all_shards,
-        shards=[] if use_all_shards else resolved_shards,
-        created_at=now,
-        updated_at=now,
-        status="initialized",
-    )
-    discovered_count = _discover_files(
-        run_dir,
-        manifest,
-        discovered_entries,
-        resolved_shards,
-    )
-    click.echo(
-        "Discovered "
-        f"{discovered_count} TSM file(s) in "
-        f"{len(manifest.shards)} shard(s)."
-    )
+
+    def _operation() -> None:
+        selection_shards, use_all_shards = _resolve_shard_selection(
+            shards,
+            all_shards=all_shards,
+            require_selection=True,
+            default_all_shards=False,
+        )
+        resolved_shards, discovered_entries = _discover_entries(
+            backup_dir=backup_dir,
+            database=database,
+            retention=retention,
+            all_shards=use_all_shards,
+            shards=selection_shards,
+        )
+        if run_dir.exists():
+            raise click.ClickException(
+                f"Run directory {run_dir} already exists."
+            )
+        run_dir.mkdir(parents=True, exist_ok=False)
+        now = _utc_now()
+        manifest = MigrationManifest(
+            run_id=_run_id(
+                backup_dir.name,
+                database,
+                retention,
+                selection_shards,
+            ),
+            backup_dir=str(backup_dir),
+            backup_name=backup_dir.name,
+            database=database,
+            retention=retention,
+            all_shards=use_all_shards,
+            shards=[] if use_all_shards else resolved_shards,
+            created_at=now,
+            updated_at=now,
+            status="initialized",
+        )
+        discovered_count = _discover_files(
+            run_dir,
+            manifest,
+            discovered_entries,
+            resolved_shards,
+        )
+        click.echo(
+            "Discovered "
+            f"{discovered_count} TSM file(s) in "
+            f"{len(manifest.shards)} shard(s)."
+        )
+
+    _run_phase("discover", _operation)
 
 
 @click.command("export")
@@ -1442,13 +1458,17 @@ def export_command(
     force: bool,
 ) -> None:
     """Export discovered TSM files to line protocol."""
-    manifest = _load_manifest_from_run_dir(run_dir)
-    exported_count = _export_files(
-        run_dir,
-        manifest,
-        force=force,
-    )
-    click.echo(f"Exported {exported_count} file(s).")
+
+    def _operation() -> None:
+        manifest = _load_manifest_from_run_dir(run_dir)
+        exported_count = _export_files(
+            run_dir,
+            manifest,
+            force=force,
+        )
+        click.echo(f"Exported {exported_count} file(s).")
+
+    _run_phase("export", _operation)
 
 
 @click.command("transform")
@@ -1471,14 +1491,18 @@ def transform_command(
     force: bool,
 ) -> None:
     """Transform exported line protocol files in place."""
-    manifest = _load_manifest_from_run_dir(run_dir)
-    transformed_count = _transform_files(
-        run_dir,
-        manifest,
-        plan,
-        force=force,
-    )
-    click.echo(f"Transformed {transformed_count} file(s).")
+
+    def _operation() -> None:
+        manifest = _load_manifest_from_run_dir(run_dir)
+        transformed_count = _transform_files(
+            run_dir,
+            manifest,
+            plan,
+            force=force,
+        )
+        click.echo(f"Transformed {transformed_count} file(s).")
+
+    _run_phase("transform", _operation)
 
 
 @click.command("import")
@@ -1539,26 +1563,30 @@ def import_command(
     force: bool,
 ) -> None:
     """Import transformed line protocol files into InfluxDB."""
-    manifest = _load_manifest_from_run_dir(run_dir)
-    resolved_target_database = target_database or manifest.database
-    resolved_target_retention = target_retention or manifest.retention
-    imported_count = _import_files(
-        run_dir,
-        manifest,
-        target_database=resolved_target_database,
-        target_retention=resolved_target_retention,
-        host=host,
-        port=port,
-        username=username,
-        password=password,
-        precision=precision,
-        pps=pps,
-        compressed=compressed,
-        ssl=ssl,
-        unsafe_ssl=unsafe_ssl,
-        force=force,
-    )
-    click.echo(f"Imported {imported_count} file(s).")
+
+    def _operation() -> None:
+        manifest = _load_manifest_from_run_dir(run_dir)
+        resolved_target_database = target_database or manifest.database
+        resolved_target_retention = target_retention or manifest.retention
+        imported_count = _import_files(
+            run_dir,
+            manifest,
+            target_database=resolved_target_database,
+            target_retention=resolved_target_retention,
+            host=host,
+            port=port,
+            username=username,
+            password=password,
+            precision=precision,
+            pps=pps,
+            compressed=compressed,
+            ssl=ssl,
+            unsafe_ssl=unsafe_ssl,
+            force=force,
+        )
+        click.echo(f"Imported {imported_count} file(s).")
+
+    _run_phase("import", _operation)
 
 
 @click.command("status")
