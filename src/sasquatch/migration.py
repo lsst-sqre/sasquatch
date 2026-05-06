@@ -16,6 +16,11 @@ import click
 import yaml
 
 from .fields import drop_measurement_field_key, rename_measurement_field_key
+from .line_protocol import (
+    _extract_measurement_from_series_key,
+    _is_metadata_line,
+    _split_record_content,
+)
 from .measurements import drop_measurement, rename_measurement
 from .tag_to_field import TagToFieldConflictError, convert_tag_to_field
 from .tags import drop_measurement_tag_key, rename_measurement_tag_key
@@ -190,7 +195,7 @@ def _run_phase(name: str, operation: Callable[[], None]) -> None:
         operation()
     except click.ClickException as exc:
         click.echo(f"Error: {exc.message}")
-        raise
+        raise click.exceptions.Exit(1) from exc
 
 
 @dataclass(frozen=True)
@@ -1131,11 +1136,51 @@ def _render_status_report(manifest: MigrationManifest) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _has_unterminated_quoted_field(text: str) -> bool:
+    """Return whether a field-set fragment ends inside a quoted string."""
+    escaped = False
+    in_quotes = False
+    for char in text:
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == '"':
+            in_quotes = not in_quotes
+    return in_quotes
+
+
+def _verify_exported_lp_file(file_path: Path) -> None:
+    """Reject exported LP files that contain multiline records."""
+    for line_number, raw_line in enumerate(
+        file_path.read_text(encoding="utf-8").splitlines(),
+        start=1,
+    ):
+        if _is_metadata_line(raw_line):
+            continue
+        record_parts = _split_record_content(raw_line)
+        if record_parts is None:
+            continue
+        series_key, field_set, remainder = record_parts
+        if not _has_unterminated_quoted_field(field_set + remainder):
+            continue
+        measurement = _extract_measurement_from_series_key(series_key)
+        raise click.ClickException(
+            "Exported file "
+            f"{file_path} contains a multiline line protocol record for "
+            f"measurement {measurement!r} starting at line {line_number}. "
+            "This export cannot be imported safely."
+        )
+
+
 def _export_files(
     run_dir: Path,
     manifest: MigrationManifest,
     *,
     force: bool,
+    verify: bool,
 ) -> int:
     """Export discovered TSM files to line protocol."""
     if not manifest.files:
@@ -1206,6 +1251,14 @@ def _export_files(
             )
             _save_manifest(run_dir, manifest)
             raise click.ClickException(record.last_error)
+
+        if verify:
+            try:
+                _verify_exported_lp_file(export_lp_path)
+            except click.ClickException as exc:
+                record.last_error = str(exc)
+                _save_manifest(run_dir, manifest)
+                raise
 
         record.exported_at = _utc_now()
         record.last_error = None
@@ -1452,10 +1505,16 @@ def discover(
     is_flag=True,
     help="Re-export files already marked exported in the manifest.",
 )
+@click.option(
+    "--verify",
+    is_flag=True,
+    help="Verify exported LP files do not contain multiline records.",
+)
 def export_command(
     run_dir: Path,
     *,
     force: bool,
+    verify: bool,
 ) -> None:
     """Export discovered TSM files to line protocol."""
 
@@ -1465,6 +1524,7 @@ def export_command(
             run_dir,
             manifest,
             force=force,
+            verify=verify,
         )
         click.echo(f"Exported {exported_count} file(s).")
 

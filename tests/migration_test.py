@@ -213,6 +213,31 @@ def _show_databases_output(*databases: str) -> str:
     return "name: databases\nname\n" + "\n".join(databases) + "\n"
 
 
+MULTILINE_EXPORT_SAMPLE = (
+    "lsst.square.metrics.events.mobu.notebook_cell_execution,"
+    "application=mobu,business=NotebookRunner,"
+    "notebook=/tmp/tmpp7aeb3u4/DP02_01_Introduction_to_DP02.ipynb,"
+    "repo=https://github.com/rubin-dp0/tutorial-notebooks.git,"
+    'repo_ref=prod,success=true,username=bot-mobu-tutorial contents="" '
+    "1734286635377134711\n"
+    "lsst.square.metrics.events.mobu.notebook_cell_execution,"
+    "application=mobu,business=NotebookRunner,"
+    "notebook=/tmp/tmpp7aeb3u4/DP02_01_Introduction_to_DP02.ipynb,"
+    "repo=https://github.com/rubin-dp0/tutorial-notebooks.git,"
+    'repo_ref=prod,success=true,username=bot-mobu-tutorial contents="'
+    "# This is a code cell. Press shift-enter to execute.\n"
+    "# The # makes these lines comments, not code. They are not executed.\n"
+    "print('Hello, world!')\" 1734297667740239680\n"
+    "lsst.square.metrics.events.mobu.notebook_cell_execution,"
+    "application=mobu,business=NotebookRunner,"
+    "notebook=/tmp/tmpp7aeb3u4/DP02_01_Introduction_to_DP02.ipynb,"
+    "repo=https://github.com/rubin-dp0/tutorial-notebooks.git,"
+    'repo_ref=prod,success=true,username=bot-mobu-tutorial contents="'
+    "# ! echo $IMAGE_DESCRIPTION\n"
+    '# ! eups list -s | grep lsst_distrib" 1734297668748888579\n'
+)
+
+
 def test_migrate_discover_creates_manifest(tmp_path: Path) -> None:
     """Discover should create a manifest from shard archives."""
     backup_dir = _create_backup_tree(tmp_path)
@@ -283,7 +308,6 @@ def test_migrate_discover_rejects_existing_run_dir(tmp_path: Path) -> None:
     assert result.output == (
         "Running discover...\n"
         f"Error: Run directory {run_dir} already exists.\n"
-        f"Error: Run directory {run_dir} already exists.\n"
     )
 
 
@@ -326,7 +350,6 @@ def test_migrate_discover_rejects_missing_shard(tmp_path: Path) -> None:
     assert result.exit_code != 0
     assert result.output == (
         "Running discover...\n"
-        "Error: No TSM files found for shard '998' in the backup directory.\n"
         "Error: No TSM files found for shard '998' in the backup directory.\n"
     )
     assert not run_dir.exists()
@@ -400,7 +423,6 @@ def test_migrate_discover_all_shards_requires_backup_manifest(
     assert result.exit_code != 0
     assert (
         "Running discover...\n"
-        f"Error: No backup manifest file found in {backup_dir}.\n"
         f"Error: No backup manifest file found in {backup_dir}.\n"
     ) == result.output
     assert not run_dir.exists()
@@ -735,7 +757,6 @@ def test_migrate_export_requires_existing_run_dir(tmp_path: Path) -> None:
     assert result.output == (
         "Running export...\n"
         f"Error: No migration-manifest.json found in {run_dir}.\n"
-        f"Error: No migration-manifest.json found in {run_dir}.\n"
     )
 
 
@@ -759,7 +780,6 @@ def test_migrate_export_requires_manifest(tmp_path: Path) -> None:
     assert result.exit_code != 0
     assert result.output == (
         "Running export...\n"
-        f"Error: No migration-manifest.json found in {run_dir}.\n"
         f"Error: No migration-manifest.json found in {run_dir}.\n"
     )
 
@@ -803,8 +823,73 @@ def test_migrate_export_requires_discovered_files(tmp_path: Path) -> None:
         "Running export...\n"
         "Error: No discovered files found in the manifest. "
         "Run discover first.\n"
-        "Error: No discovered files found in the manifest. "
-        "Run discover first.\n"
+    )
+
+
+def test_migrate_export_verify_rejects_multiline_records(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Export --verify should reject multiline LP records."""
+    backup_dir = _create_backup_tree(tmp_path)
+    run_dir = tmp_path / "run"
+
+    def fake_run(
+        argv: list[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        out_path = Path(argv[argv.index("-out") + 1])
+        out_path.write_text(MULTILINE_EXPORT_SAMPLE, encoding="utf-8")
+        return subprocess.CompletedProcess(argv, 0, "exported", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    runner = CliRunner()
+
+    discover_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "discover",
+            "--backup-dir",
+            str(backup_dir),
+            "--database",
+            "lsst.square.metrics",
+            "--retention",
+            "autogen",
+            "--shard",
+            "975",
+            "--run-dir",
+            str(run_dir),
+        ],
+    )
+    assert discover_result.exit_code == 0
+
+    export_result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "migrate",
+            "export",
+            "--run-dir",
+            str(run_dir),
+            "--verify",
+        ],
+    )
+
+    export_record = _read_manifest(run_dir)["files"][0]
+    export_lp_path = Path(export_record["export_lp_path"])
+    assert export_result.exit_code != 0
+    assert export_result.output.startswith("Running export...\n")
+    assert str(export_lp_path) in export_result.output
+    assert "notebook_cell_execution" in export_result.output
+    assert "multiline line protocol record" in export_result.output
+    manifest = _read_manifest(run_dir)
+    assert (
+        "multiline line protocol record" in manifest["files"][0]["last_error"]
     )
 
 
@@ -819,6 +904,7 @@ def test_migrate_export_help_uses_run_dir_only() -> None:
     assert result.exit_code == 0
     assert "--run-dir" in result.output
     assert "--force" in result.output
+    assert "--verify" in result.output
     assert "--backup-dir" not in result.output
     assert "--database" not in result.output
     assert "--retention" not in result.output
@@ -1085,7 +1171,6 @@ def test_migrate_transform_rejects_invalid_plan_extension(
         "Running transform...\n"
         "Error: Transform plan must use a .yaml or .yml extension.\n"
     )
-    assert "Usage: main influxdb migrate transform [OPTIONS]" in result.output
 
 
 def test_migrate_transform_rejects_unknown_operation(tmp_path: Path) -> None:
@@ -1136,7 +1221,6 @@ def test_migrate_transform_rejects_unknown_operation(tmp_path: Path) -> None:
     assert result.exit_code != 0
     assert result.output == (
         "Running transform...\n"
-        "Error: Unknown transform operation 'surprise'.\n"
         "Error: Unknown transform operation 'surprise'.\n"
     )
 
@@ -1190,8 +1274,6 @@ def test_migrate_transform_requires_exported_file(tmp_path: Path) -> None:
     export_lp_path = Path(file_record["export_lp_path"])
     assert result.output == (
         "Running transform...\n"
-        f"Error: Exported file {export_lp_path} "
-        "is missing. Run export first.\n"
         f"Error: Exported file {export_lp_path} "
         "is missing. Run export first.\n"
     )
@@ -1266,8 +1348,6 @@ def test_migrate_transform_rejects_changed_plan_without_force(
     assert second_result.exit_code != 0
     assert second_result.output == (
         "Running transform...\n"
-        "Error: Transform plan changed for an existing run. "
-        "Use --force to reapply it.\n"
         "Error: Transform plan changed for an existing run. "
         "Use --force to reapply it.\n"
     )
@@ -1470,7 +1550,6 @@ def test_migrate_transform_requires_run_dir_manifest(tmp_path: Path) -> None:
     assert result.exit_code != 0
     assert result.output == (
         "Running transform...\n"
-        f"Error: No migration-manifest.json found in {run_dir}.\n"
         f"Error: No migration-manifest.json found in {run_dir}.\n"
     )
 
@@ -1988,8 +2067,6 @@ def test_migrate_import_requires_transformed_file(tmp_path: Path) -> None:
         "Running import...\n"
         f"Error: File {file_path} has not been transformed. "
         "Run transform first.\n"
-        f"Error: File {file_path} has not been transformed. "
-        "Run transform first.\n"
     )
 
 
@@ -2277,7 +2354,6 @@ def test_migrate_import_requires_run_dir_manifest(tmp_path: Path) -> None:
     assert result.exit_code != 0
     assert result.output == (
         "Running import...\n"
-        f"Error: No migration-manifest.json found in {run_dir}.\n"
         f"Error: No migration-manifest.json found in {run_dir}.\n"
     )
 
