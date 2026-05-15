@@ -24,6 +24,7 @@ dependencies = [
     "fastapi>=0.100",
     "pydantic>2",
     "pydantic-settings>=2",
+    "PyYAML>=6",
     "safir>=5",
     "uvicorn[standard]>=0.34",
     ]
@@ -71,6 +72,7 @@ tox = [
 ]
 typing = [
     "mypy>=1.19",
+    "types-PyYAML",
 ]
 
 [tool.coverage.run]

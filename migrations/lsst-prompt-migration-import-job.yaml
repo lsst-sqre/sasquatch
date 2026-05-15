@@ -1,0 +1,71 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sasquatch-migration-import-job
+  namespace: sasquatch
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      volumes:
+      - name: backup
+        persistentVolumeClaim:
+          claimName: sasquatch-backup-artifacts
+      - name: nginx-config
+        configMap:
+          name: influxdb-nginx-proxy
+      - name: nginx-cache
+        emptyDir: {}
+      - name: nginx-run
+        emptyDir: {}
+      - name: nginx-tmp
+        emptyDir: {}
+      containers:
+      - name: nginx-proxy
+        image: nginx:alpine
+        ports:
+          - containerPort: 8086
+        volumeMounts:
+          - name: nginx-config
+            mountPath: /etc/nginx/nginx.conf
+            subPath: nginx.conf
+          - mountPath: /var/cache/nginx
+            name: nginx-cache
+          - mountPath: /var/run
+            name: nginx-run
+          - mountPath: /tmp
+            name: nginx-tmp
+      - name: sasquatch-migration
+        image: ghcr.io/lsst-sqre/sasquatch:tickets-DM-54806
+        imagePullPolicy: Always
+        env:
+        - name: SASQUATCH_INFLUXDB_USER
+          valueFrom:
+            secretKeyRef:
+              name: sasquatch
+              key: influxdb-user
+        - name: SASQUATCH_INFLUXDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: sasquatch
+              key: influxdb-password
+        volumeMounts:
+        - name: backup
+          mountPath: /backup
+        command:
+        - /bin/sh
+        - -c
+        - >
+          sasquatch influxdb migrate import
+          --run-dir /backup/lsst.prompt-migration-1
+          --host localhost
+          --port 8086
+          --username "$SASQUATCH_INFLUXDB_USER"
+          --password "$SASQUATCH_INFLUXDB_PASSWORD"
+          --target-database lsst.prompt
+  backoffLimit: 0

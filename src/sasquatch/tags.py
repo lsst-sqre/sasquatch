@@ -9,6 +9,7 @@ from .line_protocol import (
     _escape_tag_key,
     _extract_measurement_and_tag_keys,
     _find_unescaped_separator,
+    _is_metadata_line,
     _iter_tag_ranges,
     _rewrite_file_in_place,
     _unescape_if_needed,
@@ -23,8 +24,7 @@ def _rename_tag_in_line(
     measurement: str | None = None,
 ) -> str:
     """Rename a tag key in a single line of InfluxDB line protocol."""
-    stripped_line = line.strip()
-    if not stripped_line or stripped_line.startswith("#"):
+    if _is_metadata_line(line):
         return line
 
     field_separator = _find_unescaped_separator(line, " ")
@@ -71,8 +71,7 @@ def _drop_tag_from_line(
     measurement: str | None = None,
 ) -> str:
     """Drop a tag key from a single line of InfluxDB line protocol."""
-    stripped_line = line.strip()
-    if not stripped_line or stripped_line.startswith("#"):
+    if _is_metadata_line(line):
         return line
 
     field_separator = _find_unescaped_separator(line, " ")

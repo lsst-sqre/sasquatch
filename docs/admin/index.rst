@@ -22,6 +22,7 @@ A Sasquatch administrator is responsible for maintaining the Sasquatch component
    managing-shards
    adding-subcharts
    backups
+   influxdb-migration
    monitoring
    query-limits
    license
@@ -32,3 +33,8 @@ A Sasquatch administrator is responsible for maintaining the Sasquatch component
 
    request-exceeded-time-limit-error
    context-deadline-exceeded-error
+
+.. toctree::
+   :caption: Reference
+
+   cli

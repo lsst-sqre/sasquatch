@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sasquatch-migration-plan
+  namespace: sasquatch
+data:
+  plan.yaml: |
+    - op: drop-tag
+      tag: visit
+    - op: drop-tag
+      tag: group
+    - op: drop-field
+      field: band
+    - op: drop-field
+      field: dataset_tag
+    - op: drop-field
+      field: detector
+    - op: drop-field
+      field: instrument
+    - op: drop-field
+      field: physical_filter
+    - op: drop-field
+      field: skymap

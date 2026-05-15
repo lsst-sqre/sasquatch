@@ -122,7 +122,7 @@ This creates a deployment that mounts the backup volume giving you access to the
 
 .. note::
 
-  Because the backup volume is ReadWriteOnce (RWO), before enabling the restore deployment make sure you temporarily supend the execution of the backup CronJob.
+  Because the backup volume is ReadWriteOnce (RWO), before enabling the restore deployment make sure you temporarily suspend the execution of the backup CronJob.
 
 
 Restoring from a Chronograf backup
@@ -207,10 +207,10 @@ For long-running restores, define a Kubernetes Job:
          volumes:
          - name: backup
            persistentVolumeClaim:
-             claimName: sasquatch-backup
+             claimName: sasquatch-backup-artifacts
          containers:
          - name: sasquatch-backup
-           image: ghcr.io/lsst-sqre/sasquatch-backup:1.3.0
+           image: ghcr.io/lsst-sqre/sasquatch-backup:1.4.0
            imagePullPolicy: IfNotPresent
            volumeMounts:
            - name: backup
