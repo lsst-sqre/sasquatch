@@ -1,0 +1,58 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sasquatch-migration-job
+  namespace: sasquatch
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      volumes:
+      - name: backup
+        persistentVolumeClaim:
+          claimName: sasquatch-backup-artifacts
+      - name: migration-plan
+        configMap:
+          name: sasquatch-migration-plan
+      containers:
+      - name: sasquatch-migration
+        image: ghcr.io/lsst-sqre/sasquatch:tickets-DM-54806
+        imagePullPolicy: Always
+        env:
+        - name: SASQUATCH_INFLUXDB_USER
+          valueFrom:
+            secretKeyRef:
+              name: sasquatch
+              key: influxdb-user
+        - name: SASQUATCH_INFLUXDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: sasquatch
+              key: influxdb-password
+        volumeMounts:
+        - name: backup
+          mountPath: /backup
+        - name: migration-plan
+          mountPath: /etc/sasquatch-migration-plan
+          readOnly: true
+        command:
+        - /bin/sh
+        - -c
+        - >
+          sasquatch influxdb migrate discover
+          --backup-dir /backup/sasquatch-influxdb-oss-full-20260506T030009Z
+          --database lsst.prompt
+          --retention autogen
+          --run-dir /backup/lsst.prompt-migration-1
+          --all-shards &&
+          sasquatch influxdb migrate export --verify
+          --run-dir /backup/lsst.prompt-migration-1 &&
+          sasquatch influxdb migrate transform
+          --run-dir /backup/lsst.prompt-migration-1
+          --plan /etc/sasquatch-migration-plan/plan.yaml
+  backoffLimit: 0
