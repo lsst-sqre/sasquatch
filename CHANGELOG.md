@@ -1,5 +1,13 @@
 # Change log
 
+## 1.4.0 (2026-05-15)
+
+- Modernize package
+- InfluxDB transformation tool
+- InfluxDB database migration tool
+- Create a sasquatch-backup image with the backup and restore scripts
+- Documentation updates
+
 ## 1.3.3 (2025-10-03)
 
 - Configure InfluxDB Enterprise biding address
