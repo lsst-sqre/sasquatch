@@ -33,6 +33,7 @@ A Sasquatch administrator is responsible for maintaining the Sasquatch component
 
    request-exceeded-time-limit-error
    context-deadline-exceeded-error
+   force-jks-recreation
 
 .. toctree::
    :caption: Reference
