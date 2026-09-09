@@ -9,7 +9,7 @@ Do you need dedicated DevOps personnel to maintain Sasquatch? If so, how many?
 ------------------------------------------------------------------------------
 
 Typically, 0.2 FTE (Full-Time Equivalent) is sufficient to maintain Sasquatch after deployment.
-Currently, we manage Sasquatch across five different environments (Kubernetes clusters) with less than 1 FTE.
+We manage Sasquatch across the production, integration, and development :ref:`environments` with less than 1 FTE.
 
 How do you deploy Sasquatch on Kubernetes?
 ------------------------------------------
