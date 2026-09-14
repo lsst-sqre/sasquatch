@@ -55,6 +55,7 @@ dev = [
     "pytest-cov",
     "respx",
     "scriv[toml]",
+    "testcontainers",
 ]
 docs = [
     "documenteer[guide]>=2",
@@ -141,6 +142,13 @@ asyncio_mode = "strict"
 # listed in python_files.
 python_files = ["tests/*.py", "tests/*/*.py"]
 
+# The InfluxDB v1 sdk throws some warnings, and it is deprecated so it will
+# never be updated.
+filterwarnings = [
+  'ignore:datetime.datetime.utcfromtimestamp\(\) is deprecated::influxdb.line_protocol:16',
+  'ignore:datetime.datetime.utcfromtimestamp\(\) is deprecated::influxdb.client:1259'
+]
+
 # Use the generic Ruff configuration in ruff.toml and extend it with only
 # project-specific settings.
 [tool.ruff]
@@ -153,10 +161,15 @@ known-first-party = [
 ]
 
 [tool.ruff.lint.extend-per-file-ignores]
+"src/sasquatch/measurements.py" = [
+    "PLR0917", # Too many positional arguments (Click builds the CLI from
+               # the decorated command signature; nothing calls it directly).
+]
 "src/sasquatch/migration.py" = [
     "PLR0917", # Too many positional arguments (Click builds the CLI from
                # the decorated command signature; nothing calls it directly).
 ]
+
 [tool.scriv]
 categories = [
     "Backwards-incompatible changes",

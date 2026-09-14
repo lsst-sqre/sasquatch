@@ -1,9 +1,12 @@
 """Commands for working with InfluxDB line protocol measurements."""
 
 from collections import defaultdict
+from datetime import timedelta
 from pathlib import Path
 
 import click
+from influxdb import InfluxDBClient
+from safir.datetime import parse_timedelta
 
 from .line_protocol import (
     _escape_tag_key,
@@ -14,6 +17,7 @@ from .line_protocol import (
     _is_metadata_line,
     _rewrite_file_in_place,
 )
+from .services.influxdb import InfluxDB
 
 
 def _drop_measurement_from_line(line: str, measurement_to_drop: str) -> str:
@@ -187,3 +191,52 @@ def rename_measurement_command(
     )
     if verbose:
         click.echo(f"Modified {modified_line_count} lines.")
+
+
+@click.command("list-stale-measurements")
+@click.option("--host", required=True, help="InfluxDB host name.")
+@click.option("--port", type=int, default=8086, show_default=True)
+@click.option("--path", type=str, default="", show_default=True)
+@click.option("--username", required=True, help="InfluxDB username.")
+@click.option("--password", required=True, help="InfluxDB password.")
+@click.option(
+    "--database",
+    required=True,
+    help="Database to look in.",
+)
+@click.option(
+    "--since",
+    type=parse_timedelta,
+    default="30d",
+    help="A measurement is stale if it has seen no data in this much time.",
+)
+@click.option("--ssl", type=bool, default=False, show_default=True)
+def list_stale_measurements_command(
+    host: str,
+    port: int,
+    path: str,
+    username: str,
+    password: str,
+    database: str,
+    since: timedelta,
+    *,
+    ssl: bool,
+) -> None:
+    """List all measurements that haven't recieved data in a while."""
+    client = InfluxDBClient(
+        host=host,
+        port=port,
+        path=path,
+        ssl=ssl,
+        verify_ssl=True,
+        username=username,
+        password=password,
+        database=database,
+    )
+    db = InfluxDB(scoped_client=client)
+    stale = db.get_stale_measurements(since)
+    if not stale:
+        click.echo("There are no stale measurements", err=True)
+        return
+    for name in stale:
+        click.echo(name)
