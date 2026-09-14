@@ -23,6 +23,7 @@ requires-python = ">=3.14"
 dependencies = [
     "confluent-kafka>=2.15",
     "fastapi>=0.100",
+    "influxdb>=5.3.2",
     "pydantic>2",
     "pydantic-settings>=2",
     "PyYAML>=6",
@@ -151,6 +152,11 @@ known-first-party = [
     "tests",
 ]
 
+[tool.ruff.lint.extend-per-file-ignores]
+"src/sasquatch/migration.py" = [
+    "PLR0917", # Too many positional arguments (Click builds the CLI from
+               # the decorated command signature; nothing calls it directly).
+]
 [tool.scriv]
 categories = [
     "Backwards-incompatible changes",
