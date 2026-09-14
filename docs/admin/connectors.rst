@@ -28,26 +28,102 @@ Here is the ``example`` connector configuration:
       example:
         enabled: true
         debug: true
-        topicRegexps: |
-          [ "lsst.example" ]
+        topicRegexps:
+          - "lsst.example"
         database: "lsst.example"
         timestamp_field: "timestamp"
         timestamp_format: "unix_ms"
         tags: |
           [ "band", "instrument" ]
 
-Specifying the Kafka topics and the InfluxDB database
------------------------------------------------------
+Selecting Kafka topics
+----------------------
 
-The ``skyFluxMetric`` metric is published to the ``lsst.example.skyFluxMetric`` Kafka topic.
+Use ``topicRegexps`` to specify a list of regular expressions to select Kafka topics consumed by the connector.
+This list is additive and uses `Go's standard regexp package`_ which implements regular expressions using RE2 syntax.
 
-``topicRegexps`` accepts a list of regular expressions to select the Kafka topics for the connector, and ``database`` specifies the name of the database in InfluxDB.
+``database`` specifies the name of the database in InfluxDB and Sasquatch convention is to use the same namespace as the Kafka topics.
 
-In this example, we select all Kafka topics from the ``lsst.example`` namespace and write the data into the ``lsst.example`` database in InfluxDB.
+In the example above we select all Kafka topics with the ``lsst.example`` prefix and write the data into the ``lsst.example`` database in InfluxDB.
 
 .. note::
 
-  If the database doesn't exist in InfluxDB it is automatically create by Telegraf.
+  If the database doesn't exist in InfluxDB, it is automatically created by
+  Telegraf.
+
+Discovering topics dynamically
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Use ``topicDiscovery`` when the set of Kafka topics changes over time and
+cannot be maintained as a static ``topicRegexps`` list. Topic discovery is
+configured independently for each connector. For example:
+
+.. code:: yaml
+
+  telegraf:
+    kafkaConsumers:
+      example:
+        enabled: true
+        database: "lsst.example"
+        topicDiscovery:
+          enabled: true
+          includePrefixes:
+            - "lsst.example"
+          excludePrefixes:
+            - "lsst.example.private"
+          refreshInterval: "30s"
+
+``includePrefixes`` and ``excludePrefixes`` contain literal, case-sensitive
+topic prefixes. A topic is selected when it starts with any include prefix
+and no exclude prefix. Exclusions take precedence. The example therefore
+includes ``lsst.example``, ``lsst.example.skyFluxMetric``, and
+``lsst.examples``, but excludes ``lsst.example.private`` and
+``lsst.example.private.metric``.
+
+At least one non-empty include prefix is required. Prefixes cannot contain
+leading or trailing whitespace or newlines. If ``topicDiscovery.enabled`` is
+true, ``topicRegexps`` is ignored. To require a namespace separator, include
+it in the prefix; for example, ``lsst.example.`` does not match
+``lsst.examples``.
+
+Each Telegraf Pod runs a topic-discovery sidecar. The sidecar queries Kafka
+immediately at startup and then every ``refreshInterval``, using the existing
+``telegraf`` Kafka credentials. It writes an explicit, sorted topic list to a
+dynamic Telegraf configuration file. Telegraf watches that file and reloads
+the configuration when the selected topic set changes, without restarting
+the Pod or resetting consumer-group offsets.
+
+A successful query that selects no topics installs an empty dynamic
+configuration, stopping Kafka consumption until a later query finds matching
+topics. A failed Kafka query or invalid result preserves the last known-good
+configuration. The sidecar becomes ready only after its first successful
+query, including a successful query with no matches. Inspect discovery logs
+for one connector with:
+
+.. code:: bash
+
+  kubectl logs \
+    --namespace sasquatch \
+    --selector app.kubernetes.io/instance=sasquatch-telegraf-<connector-name> \
+    --container topic-discovery
+
+The sidecar runs the following Sasquatch command in watch mode:
+
+.. code:: bash
+
+  sasquatch telegraf update-topic-config \
+    --watch \
+    --bootstrap-server sasquatch-kafka-brokers.sasquatch:9092 \
+    --include-prefixes-file /etc/telegraf-static/include-prefixes.txt \
+    --exclude-prefixes-file /etc/telegraf-static/exclude-prefixes.txt \
+    --input-template /etc/telegraf-static/kafka-consumer.conf.tmpl \
+    --output-config /etc/telegraf-dynamic/kafka-consumer.conf \
+    --ready-file /var/run/topic-discovery/ready \
+    --refresh-interval 30s
+
+The command performs one reconciliation and exits when ``--watch`` is
+omitted. ``TELEGRAF_PASSWORD`` must be present in its environment. See
+:ref:`cli` for the complete command reference.
 
 Timestamps
 ----------
@@ -217,3 +293,4 @@ See the **Connectors** dashboard in Chronograf to monitor the Telegraf connector
 .. _Kafka consumer: https://github.com/influxdata/telegraf/blob/master/plugins/inputs/kafka_consumer/README.md
 .. _InfluxDB schema design and data layout: https://docs.influxdata.com/influxdb/v1/concepts/schema_and_data_layout
 .. _telegraf subchart: https://github.com/lsst-sqre/phalanx/tree/main/applications/sasquatch/charts/telegraf/README.md
+.. _Go's standard regexp package: https://pkg.go.dev/regexp
