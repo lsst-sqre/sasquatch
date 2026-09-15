@@ -4,6 +4,7 @@ import click
 from safir.click import display_help
 
 from .influxdb import influxdb
+from .telegraf.cli import telegraf
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
@@ -22,3 +23,4 @@ def help(ctx: click.Context, topic: str | None, subtopic: str | None) -> None:
 
 
 main.add_command(influxdb)
+main.add_command(telegraf)
