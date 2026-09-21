@@ -36,6 +36,7 @@ ignore = [
     "ASYNC240", # we don't want to run filesystem operations on threads
     "BLE001",   # we want to catch and report Exception in background tasks
     "C414",     # nested sorted is how you sort by multiple keys with reverse
+    "CPY001",   # missing copyright notice at top of file
     "D102",     # sometimes we use docstring inheritence
     "D104",     # don't see the point of documenting every package
     "D105",     # our style doesn't require docstrings for magic methods
@@ -50,6 +51,7 @@ ignore = [
     "RET505",   # disagree that omitting else always makes code more readable
     "PLR0911",  # often many returns is clearer and simpler style
     "PLR0913",  # factory pattern uses constructors with many arguments
+    "PLR0917",  # too many positional arguments
     "PLR2004",  # too aggressive about magic values
     "PLW0603",  # yes global is discouraged but if needed, it's needed
     "S105",     # good idea but too many false positives on non-passwords
