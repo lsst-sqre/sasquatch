@@ -1,6 +1,6 @@
 # Change log
 
-## 1.5.0 (unreleased)
+## 1.5.0 (2026-09-21)
 
 - Add Kafka topic discovery and dynamic Telegraf configuration updates with
   `sasquatch telegraf update-topic-config`.
