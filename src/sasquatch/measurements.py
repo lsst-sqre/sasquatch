@@ -1,9 +1,12 @@
 """Commands for working with InfluxDB line protocol measurements."""
 
 from collections import defaultdict
+from datetime import timedelta
 from pathlib import Path
 
 import click
+from influxdb import InfluxDBClient
+from safir.datetime import parse_timedelta
 
 from .line_protocol import (
     _escape_tag_key,
@@ -14,6 +17,8 @@ from .line_protocol import (
     _is_metadata_line,
     _rewrite_file_in_place,
 )
+from .services.influxdb import InfluxDBService
+from .storage.influxdb import InfluxDBStorage
 
 
 def _drop_measurement_from_line(line: str, measurement_to_drop: str) -> str:
@@ -56,7 +61,6 @@ def _rename_measurement_in_line(
     line_measurement = _extract_measurement_from_series_key(series_key)
     if line_measurement != measurement_to_rename:
         return line
-
     escaped_measurement = _escape_tag_key(new_measurement_name)
     if first_tag_separator == -1:
         return f"{escaped_measurement}{remainder}{line_ending}"
@@ -187,3 +191,81 @@ def rename_measurement_command(
     )
     if verbose:
         click.echo(f"Modified {modified_line_count} lines.")
+
+
+@click.command("list-stale-measurements")
+@click.option("--host", required=True, help="InfluxDB host name.")
+@click.option("--port", type=int, default=8086, show_default=True)
+@click.option("--path", type=str, default="", show_default=True)
+@click.option("--username", required=True, help="InfluxDB username.")
+@click.option("--password", required=True, help="InfluxDB password.")
+@click.option(
+    "--database",
+    required=True,
+    help="Database to look in.",
+)
+@click.option(
+    "--retention-policy",
+    type=str,
+    default=None,
+    help="Retention policy to query. None to query all retention policies.",
+)
+@click.option(
+    "--since",
+    type=parse_timedelta,
+    default="30d",
+    help="A measurement is stale if it has seen no data in this much time.",
+)
+@click.option(
+    "--timeout",
+    type=float,
+    default=None,
+    help=(
+        "The time (in seconds)to wait for a response from InfluxDB for any"
+        "request. If this is None, then no timeout gets set on the connection."
+        " Note that this only sets a timeout on the client side, a query might"
+        " continue running on the server even if this timeout is exceeded."
+        " Similarly, if the server is configured with a lower query timeout"
+        " than this, the server will send an error response if that timeout is"
+        " exceeded."
+    ),
+)
+@click.option("--ssl", type=bool, default=False, show_default=True)
+def list_stale_measurements_command(
+    host: str,
+    port: int,
+    path: str,
+    username: str,
+    password: str,
+    database: str,
+    retention_policy: str | None,
+    since: timedelta,
+    timeout: float,
+    *,
+    ssl: bool,
+) -> None:
+    """List all measurements that haven't recieved data in a while."""
+    client = InfluxDBClient(
+        host=host,
+        port=port,
+        path=path,
+        ssl=ssl,
+        verify_ssl=True,
+        username=username,
+        password=password,
+        timeout=timeout,
+    )
+    storage = InfluxDBStorage(client=client, database=database)
+    service = InfluxDBService(storage=storage)
+    stale = service.get_stale_measurements(
+        since=since, retention_policy=retention_policy
+    )
+    if not stale:
+        click.echo("There are no stale measurements", err=True)
+        return
+    for point in stale:
+        click.echo(
+            f"{point.retention_policy} -"
+            f" {point.measurement} -"
+            f" {point.time.isoformat()}"
+        )
