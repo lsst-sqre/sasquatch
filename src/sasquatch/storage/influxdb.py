@@ -1,17 +1,13 @@
 """Storage for interacting with an InfluxDB database v1 DB via the HTTP API."""
 
+from datetime import UTC, datetime, timedelta
+from textwrap import dedent
 from typing import final
 
 from influxdb import InfluxDBClient
 from influxdb.line_protocol import quote_ident
 
-from ..models.influxdb import (
-    BasePoint,
-    ClientDict,
-    Measurement,
-    Point,
-    RetentionPolicy,
-)
+from ..models.influxdb import ClientDict, Measurement, Point, RetentionPolicy
 
 __all__ = ["InfluxDBStorage"]
 
@@ -57,47 +53,69 @@ class InfluxDBStorage:
         raw = self._client.get_list_retention_policies()
         return [RetentionPolicy.model_validate(val).name for val in raw]
 
-    def get_latest_point(
-        self, policy: str, measurement: str
-    ) -> BasePoint | None:
-        """Get the latest point from a measurement.
+    def exists(self, retention_policy: str, measurement: str) -> bool:
+        """Return true if any data for the policy-qualified measurement exists.
 
         Parameters
         ----------
-        policy
+        retention_policy
             The retention policy of the measurement
         measurement
             The measurement
-
-        Returns
-        -------
-        BasePoint
-            Basic information about the most recent point in the database for
-            the given measurement and retention policy.
         """
         source = ".".join(
             (
-                quote_ident(policy),
+                quote_ident(retention_policy),
                 quote_ident(measurement),
             )
         )
-        query = (
-            f"SELECT * FROM {source}"  # noqa: S608
-            f" ORDER BY time DESC"
-            f" LIMIT 1"
-        )
+
+        query = dedent(f"""\
+            SELECT *
+            FROM {source}
+            LIMIT 1
+        """)  # noqa: S608
         result = self._client.query(query)
         points = list(result.get_points())
-        if not points:
-            return None
+        return bool(points)
 
-        return BasePoint.model_validate(
-            {
-                "measurement": measurement,
-                "retention_policy": policy,
-                "time": points[0]["time"],
-            }
+    def is_stale(
+        self, retention_policy: str, measurement: str, since: timedelta
+    ) -> bool:
+        """Return True if a measurement doesn't have points since a given time.
+
+        Parameters
+        ----------
+        retention_policy
+            The retention policy of the measurement
+        measurement
+            The measurement
+        since
+            A measurement is active if it has points recorded in this amount of
+            time before now.
+
+        Returns
+        -------
+        bool
+            Whether the measurement has points within the specified time before
+            now.
+        """
+        source = ".".join(
+            (
+                quote_ident(retention_policy),
+                quote_ident(measurement),
+            )
         )
+        time = datetime.now(UTC) - since
+
+        query = dedent(f"""\
+            SELECT * FROM {source}
+            WHERE time >= '{time.isoformat()}'
+            LIMIT 1
+        """)  # noqa: S608
+        result = self._client.query(query)
+        points = list(result.get_points())
+        return not points
 
     def write_points(
         self,

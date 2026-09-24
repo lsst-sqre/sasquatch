@@ -1,6 +1,6 @@
 """Service to interact with an InfluxDB database."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from itertools import product
 from typing import final
 
@@ -28,7 +28,7 @@ class InfluxDBService:
 
     def get_stale_measurements(
         self,
-        since: timedelta | None = None,
+        since: timedelta,
         retention_policy: str | None = None,
     ) -> list[BasePoint]:
         """Get measurements that have not been written to since some time.
@@ -63,15 +63,20 @@ class InfluxDBService:
         # every combination, even though some of those combinations might not
         # exist. In that case, the query just returns nothing.
         for policy, measurement in product(policies, measurements):
-            point = self._storage.get_latest_point(
-                policy=policy, measurement=measurement
-            )
-            if point:
-                stale.append(point)
+            if not self._storage.exists(
+                retention_policy=policy, measurement=measurement
+            ):
+                continue
 
-        if since:
-            oldest = datetime.now(UTC) - since
-            stale = [p for p in stale if p.time < oldest]
+            is_stale = self._storage.is_stale(
+                retention_policy=policy, measurement=measurement, since=since
+            )
+
+            if is_stale:
+                stale.append(
+                    BasePoint(measurement=measurement, retention_policy=policy)
+                )
+
         return stale
 
     def write_points(

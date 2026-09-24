@@ -42,13 +42,6 @@ class BasePoint(BaseModel):
     retention_policy: str | None = None
     """The name of the retention policy for the measurement."""
 
-    time: AwareDatetime
-    """The timestamp of this point.
-
-    Note that Python timestamps are only microsecond precision, but InfluxDB
-    timestamps go to nanosecond precision.
-    """
-
 
 class Point(BasePoint):
     """An InfluxDB point."""
@@ -58,6 +51,13 @@ class Point(BasePoint):
 
     fields: dict[str, ValidValue] = Field(default_factory=dict)
     """Fields on this point."""
+
+    time: AwareDatetime
+    """The timestamp of this point.
+
+    Note that Python timestamps are only microsecond precision, but InfluxDB
+    timestamps go to nanosecond precision.
+    """
 
     raw_time: str | None = None
     """A string of an integer unix timestamp to nanosecond precision.

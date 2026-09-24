@@ -17,11 +17,7 @@ def output(points: list[Point], retention_policy: str) -> set[str]:
     """Return a set of expected output lines given points."""
     lines: set[str] = set()
     for point in points:
-        line = (
-            f"{retention_policy} -"
-            f" {point.measurement} -"
-            f" {point.time.isoformat()}"
-        )
+        line = f"{retention_policy} - {point.measurement}"
         lines.add(line)
     return lines
 

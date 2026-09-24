@@ -264,8 +264,4 @@ def list_stale_measurements_command(
         click.echo("There are no stale measurements", err=True)
         return
     for point in stale:
-        click.echo(
-            f"{point.retention_policy} -"
-            f" {point.measurement} -"
-            f" {point.time.isoformat()}"
-        )
+        click.echo(f"{point.retention_policy} - {point.measurement}")
