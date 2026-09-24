@@ -78,3 +78,6 @@ class RetentionPolicy(BaseModel):
 
     name: str
     """The name of this retention policy."""
+
+    default: bool
+    """If this is the default retention policy for the database."""

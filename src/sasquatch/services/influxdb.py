@@ -4,6 +4,7 @@ from datetime import timedelta
 from itertools import product
 from typing import final
 
+from ..exceptions import RetentionPolicyNotFoundError
 from ..models.influxdb import BasePoint, Point
 from ..storage.influxdb import InfluxDBStorage
 
@@ -50,10 +51,12 @@ class InfluxDBService:
         """
         measurements = self._storage.get_measurements()
 
+        policies = self._storage.get_policies()
         if retention_policy:
-            policies = [retention_policy]
-        else:
-            policies = self._storage.get_policies()
+            policies = [p for p in policies if p == retention_policy]
+            if len(policies) == 0:
+                msg = f"Retention policy {retention_policy} not found"
+                raise RetentionPolicyNotFoundError(msg)
 
         stale: list[BasePoint] = []
 

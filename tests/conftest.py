@@ -26,20 +26,17 @@ def influxdb_container() -> Generator[InfluxDBTestcontainer]:
 
 
 @pytest.fixture
-def influxdb_connection(
+def influxdb_connection_single_retention_policy(
     influxdb_container: InfluxDBTestcontainer,
 ) -> Generator[InfluxDBConnection]:
-    """Give an InfluxDB service and info pointed at prepped instance."""
+    """Give an InfluxDB service and info pointed at prepped instance.
+
+    Only the default retention policy exists in this db.
+    """
     database = INFLUXDB_DATABASE
     influxdb_container.reset()
     client = influxdb_container.make_client(database=database)
     client.create_database(INFLUXDB_DATABASE)
-
-    client.create_retention_policy(
-        name=INFLUXDB_CUSTOM_RETENTION_POLICY,
-        duration=INFLUXDB_INFINITE_RETENTION_DURATION,
-        replication="1",
-    )
 
     storage = InfluxDBStorage(client=client, database=database)
     service = InfluxDBService(storage=storage)
@@ -56,3 +53,20 @@ def influxdb_connection(
 
     with client:
         yield connection
+
+
+@pytest.fixture
+def influxdb_connection(
+    influxdb_connection_single_retention_policy: InfluxDBConnection,
+) -> InfluxDBConnection:
+    """Give an InfluxDB service and info pointed at prepped instance.
+
+    An addition retention policy is created in this db.
+    """
+    client = influxdb_connection_single_retention_policy.client
+    client.create_retention_policy(
+        name=INFLUXDB_CUSTOM_RETENTION_POLICY,
+        duration=INFLUXDB_INFINITE_RETENTION_DURATION,
+        replication="1",
+    )
+    return influxdb_connection_single_retention_policy

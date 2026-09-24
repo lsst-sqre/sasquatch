@@ -23,14 +23,19 @@ def output(points: list[Point], retention_policy: str) -> set[str]:
 
 
 @dataclass
-class Data:
-    """A collection of test data."""
+class DataSingleRetentionPolicy:
+    """A collection of test data for the default retention policy."""
 
     stale_points: list[Point]
     """Stale points in the default retention policy."""
 
     fresh_points: list[Point]
     """Fresh points in the default retention policy."""
+
+
+@dataclass
+class Data(DataSingleRetentionPolicy):
+    """A collection of test data for multiple retention policies."""
 
     stale_points_rp: list[Point]
     """Stale points in the custom retention policy."""
@@ -39,12 +44,14 @@ class Data:
     """Fresh points in the custom retention policy."""
 
 
-def load_data(service: InfluxDBService) -> Data:
-    """Load test data.
+def load_data_single_retention_policy(
+    service: InfluxDBService,
+) -> DataSingleRetentionPolicy:
+    """Load test data for the default retention policy.
 
     Returns
     -------
-    Data
+    DataSingleRetentionPolicy
         The test data written to the database
     """
     now = datetime.now(UTC)
@@ -84,6 +91,29 @@ def load_data(service: InfluxDBService) -> Data:
     ]
     service.write_points(fresh_points)
 
+    return DataSingleRetentionPolicy(
+        stale_points=stale_points, fresh_points=fresh_points
+    )
+
+
+def load_data(service: InfluxDBService) -> Data:
+    """Load test data.
+
+    Returns
+    -------
+    Data
+        The test data written to the database
+    """
+    now = datetime.now(UTC)
+    stale = timedelta(days=30)
+    fresh = timedelta(days=25)
+    stale1 = now - stale - timedelta(seconds=1)
+    stale2 = now - stale - timedelta(seconds=1)
+    fresh1 = now - fresh - timedelta(seconds=1)
+    fresh2 = now - fresh - timedelta(seconds=1)
+
+    default = load_data_single_retention_policy(service)
+
     stale_points_rp = [
         Point(
             measurement="stale_custom_rp",
@@ -103,7 +133,7 @@ def load_data(service: InfluxDBService) -> Data:
     fresh_points_rp = [
         Point(
             measurement="fresh_custom_rp",
-            time=fresh2,
+            time=fresh1,
             fields={"field1": "first"},
         ),
         Point(
@@ -117,8 +147,8 @@ def load_data(service: InfluxDBService) -> Data:
     )
 
     return Data(
-        stale_points=stale_points,
-        fresh_points=fresh_points,
+        stale_points=default.stale_points,
+        fresh_points=default.fresh_points,
         stale_points_rp=stale_points_rp,
         fresh_points_rp=fresh_points_rp,
     )
@@ -224,6 +254,68 @@ def test_list_stale_takes_retention_policy(
     stale = output(
         data.stale_points_rp, retention_policy=INFLUXDB_CUSTOM_RETENTION_POLICY
     )
+    expected = stale
+    actual = set(result.output.splitlines())
+
+    assert actual == expected
+
+
+def test_list_stale_errors_on_bad_retention_policy(
+    influxdb_connection: InfluxDBConnection,
+) -> None:
+    """Test the measurement list-stale command 'retention_policy' option."""
+    _ = load_data(service=influxdb_connection.service)
+    runner = CliRunner()
+    cmd = [
+        "influxdb",
+        "list-stale-measurements",
+        "--host",
+        influxdb_connection.host,
+        "--port",
+        str(influxdb_connection.port),
+        "--username",
+        influxdb_connection.username,
+        "--password",
+        influxdb_connection.password,
+        "--database",
+        influxdb_connection.database,
+        "--retention-policy",
+        "nope",
+    ]
+
+    result = runner.invoke(main, cmd)
+    assert result.exit_code == 1
+    assert result.output == "Error: Retention policy nope not found\n"
+
+
+def test_list_stale_single_regention_policy(
+    influxdb_connection_single_retention_policy: InfluxDBConnection,
+) -> None:
+    """Test the measurement list-stale command against a single-rp DB.
+
+    We test this because we use a different query for measurement existence for
+    DBs with only the single default retention policy.
+    """
+    connection = influxdb_connection_single_retention_policy
+    data = load_data_single_retention_policy(service=connection.service)
+    runner = CliRunner()
+    cmd = [
+        "influxdb",
+        "list-stale-measurements",
+        "--host",
+        connection.host,
+        "--port",
+        str(connection.port),
+        "--username",
+        connection.username,
+        "--password",
+        connection.password,
+        "--database",
+        connection.database,
+    ]
+    result = runner.invoke(main, cmd)
+
+    stale = output(data.stale_points, retention_policy="autogen")
     expected = stale
     actual = set(result.output.splitlines())
 

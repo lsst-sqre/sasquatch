@@ -1,15 +1,19 @@
 """Storage for interacting with an InfluxDB database v1 DB via the HTTP API."""
 
+import logging
 from datetime import UTC, datetime, timedelta
 from textwrap import dedent
 from typing import final
 
 from influxdb import InfluxDBClient
 from influxdb.line_protocol import quote_ident
+from influxdb.resultset import ResultSet
 
 from ..models.influxdb import ClientDict, Measurement, Point, RetentionPolicy
 
 __all__ = ["InfluxDBStorage"]
+
+logger = logging.getLogger(__name__)
 
 
 @final
@@ -27,6 +31,7 @@ class InfluxDBStorage:
     def __init__(self, client: InfluxDBClient, database: str) -> None:
         self._client = client
         self._client.switch_database(database)
+        self._database = database
 
     def get_measurements(self) -> list[str]:
         """Get a list of all measurements in the database.
@@ -53,7 +58,11 @@ class InfluxDBStorage:
         raw = self._client.get_list_retention_policies()
         return [RetentionPolicy.model_validate(val).name for val in raw]
 
-    def exists(self, retention_policy: str, measurement: str) -> bool:
+    def exists(
+        self,
+        retention_policy: str,
+        measurement: str,
+    ) -> bool:
         """Return true if any data for the policy-qualified measurement exists.
 
         Parameters
@@ -65,22 +74,40 @@ class InfluxDBStorage:
         """
         source = ".".join(
             (
+                quote_ident(self._database),
                 quote_ident(retention_policy),
                 quote_ident(measurement),
             )
         )
 
-        query = dedent(f"""\
-            SELECT *
-            FROM {source}
-            LIMIT 1
-        """)  # noqa: S608
-        result = self._client.query(query)
+        policies = self.get_policies()
+        if len(policies) == 1:
+            # This is MUCH faster than "SELECT * FROM <source> LIMIT 1", but
+            # there is no way to scope it to a retention policy. The only case
+            # where we can use it is if there is only one retention policy in
+            # the db.
+            query = dedent(f"""\
+                SHOW SERIES
+                FROM {source}
+                LIMIT 1
+            """)
+        else:
+            query = dedent(f"""\
+                SELECT *
+                FROM {source}
+                ORDER BY time DESC
+                LIMIT 1
+            """)  # noqa: S608
+        logger.info(f"Checking if measurement {source} exists")
+        result = self._query(query)
         points = list(result.get_points())
         return bool(points)
 
     def is_stale(
-        self, retention_policy: str, measurement: str, since: timedelta
+        self,
+        retention_policy: str,
+        measurement: str,
+        since: timedelta,
     ) -> bool:
         """Return True if a measurement doesn't have points since a given time.
 
@@ -113,7 +140,8 @@ class InfluxDBStorage:
             WHERE time >= '{time.isoformat()}'
             LIMIT 1
         """)  # noqa: S608
-        result = self._client.query(query)
+        logger.info(f"Checking if measurement {source} is stale")
+        result = self._query(query)
         points = list(result.get_points())
         return not points
 
@@ -141,6 +169,21 @@ class InfluxDBStorage:
             batch_size=batch_size,
             retention_policy=retention_policy,
         )
+
+    def _query(self, query: str) -> ResultSet:
+        """Execute a query and log how long it took.
+
+        Parameters
+        ----------
+        query
+            The query to execute.
+        """
+        start = datetime.now(UTC)
+        try:
+            return self._client.query(query)
+        finally:
+            elapsed = datetime.now(UTC) - start
+            logger.debug(f"{query!r} - elapsed: {elapsed.total_seconds()}s")
 
     def _point_to_dict(self, point: Point) -> ClientDict:
         """Return a dict suitable for writing with the InfluxDB client."""
