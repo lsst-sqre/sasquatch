@@ -1,0 +1,2 @@
+cpu: tags=(no tags); fields=value
+weather: tags=region, zone; fields=humidity, temp

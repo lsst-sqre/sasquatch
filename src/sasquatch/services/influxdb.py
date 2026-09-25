@@ -2,8 +2,7 @@
 
 from datetime import timedelta
 from itertools import product
-from textwrap import dedent
-from typing import IO, Any, final
+from typing import final
 
 from ..exceptions import RetentionPolicyNotFoundError
 from ..models.influxdb import BasePoint, Point
@@ -82,33 +81,6 @@ class InfluxDBService:
                 )
 
         return stale
-
-    def export_measurement(
-        self, retention_policy: str, measurement: str, file: IO[Any]
-    ) -> None:
-        """Write a line protocol file with all points in a measurement.
-
-        Parameters
-        ----------
-        retention_policy
-            The retention policy that contains the measurement.
-        measurement
-            The name of the measurement.
-        file
-            An open stream to write to.
-        """
-        header = dedent(f"""\
-            # DML
-            # CONTEXT-DATABASE: {self._storage.database}
-            # CONTEXT-RETENTION-POLICY: {retention_policy}
-
-        """)
-        file.writelines(header)
-
-        for point in self._storage.get_all_lp(
-            retention_policy=retention_policy, measurement=measurement
-        ):
-            file.writelines([f"{point}\n"])
 
     def write_points(
         self,
