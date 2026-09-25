@@ -1,16 +1,14 @@
 """Storage for interacting with an InfluxDB database v1 DB via the HTTP API."""
 
 import logging
-from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 from textwrap import dedent
 from typing import final
 
 from influxdb import InfluxDBClient
-from influxdb.line_protocol import make_line, quote_ident
+from influxdb.line_protocol import quote_ident
 from influxdb.resultset import ResultSet
 
-from ..constants import INFLUXDB_EXPORT_CHUNK_SIZE
 from ..models.influxdb import ClientDict, Measurement, Point, RetentionPolicy
 
 __all__ = ["InfluxDBStorage"]
@@ -33,7 +31,7 @@ class InfluxDBStorage:
     def __init__(self, client: InfluxDBClient, database: str) -> None:
         self._client = client
         self._client.switch_database(database)
-        self.database = database
+        self._database = database
 
     def get_measurements(self) -> list[str]:
         """Get a list of all measurements in the database.
@@ -76,7 +74,7 @@ class InfluxDBStorage:
         """
         source = ".".join(
             (
-                quote_ident(self.database),
+                quote_ident(self._database),
                 quote_ident(retention_policy),
                 quote_ident(measurement),
             )
@@ -186,67 +184,6 @@ class InfluxDBStorage:
         finally:
             elapsed = datetime.now(UTC) - start
             logger.debug(f"{query!r} - elapsed: {elapsed.total_seconds()}s")
-
-    def get_all_lp(
-        self,
-        retention_policy: str,
-        measurement: str,
-        chunk_size: int = INFLUXDB_EXPORT_CHUNK_SIZE,
-    ) -> Generator[str]:
-        """Yield every point from a query in line protocol format.
-
-        Parameters
-        ----------
-        retention_policy
-            The retention policy that contains the measurement.
-        measurement
-            The name of the measurement.
-        chunk_size
-            The number of points to return in each query.
-        """
-        tag_keys = self._get_tag_keys(measurement)
-        source = ".".join(
-            (
-                quote_ident(retention_policy),
-                quote_ident(measurement),
-            )
-        )
-        query = f"SELECT * FROM {source}"  # noqa: S608
-        results = self._client.query(
-            query, chunked=True, chunk_size=chunk_size
-        )
-        for result in results:
-            for raw_point in result.get_points():
-                point = dict(raw_point)
-
-                timestamp = point.pop("time")
-
-                tags = {
-                    key: str(value)
-                    for key, value in point.items()
-                    if key in tag_keys and value is not None
-                }
-
-                fields = {
-                    key: value
-                    for key, value in point.items()
-                    if key not in tag_keys and value is not None
-                }
-
-                yield make_line(
-                    measurement,
-                    tags=tags,
-                    fields=fields,
-                    time=timestamp,
-                    precision="n",
-                )
-
-    def _get_tag_keys(self, measurement: str) -> list[str]:
-        """Get all of the tag keys for a measurement."""
-        query = f"SHOW TAG KEYS FROM {quote_ident(measurement)}"
-        result = self._client.query(query)
-        rows = result.get_points()
-        return [row["tagKey"] for row in rows]
 
     def _point_to_dict(self, point: Point) -> ClientDict:
         """Return a dict suitable for writing with the InfluxDB client."""

@@ -5,7 +5,6 @@ import click
 from .fields import drop_field, rename_field, show_fields
 from .measurements import (
     drop_measurement_command,
-    export_measurement_command,
     list_stale_measurements_command,
     rename_measurement_command,
     show_measurements,
@@ -40,4 +39,3 @@ line_protocol.add_command(convert_tag_to_field_command)
 influxdb.add_command(line_protocol)
 influxdb.add_command(migrate)
 influxdb.add_command(list_stale_measurements_command)
-influxdb.add_command(export_measurement_command)
