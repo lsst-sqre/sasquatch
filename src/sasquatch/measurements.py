@@ -41,6 +41,25 @@ def _drop_measurement_from_line(line: str, measurement_to_drop: str) -> str:
     return line
 
 
+def _keep_measurement(line: str, measurements_to_keep: tuple[str]) -> str:
+    """Drop a measurement if it is not in the list."""
+    line_ending = "\n" if line.endswith("\n") else ""
+    content = line.removesuffix(line_ending)
+    if _is_metadata_line(content):
+        return line
+
+    field_separator = _find_unescaped_separator(content, " ")
+    if field_separator == -1:
+        return line
+
+    series_key = content[:field_separator]
+    line_measurement = _extract_measurement_from_series_key(series_key)
+    if line_measurement not in measurements_to_keep:
+        return ""
+
+    return line
+
+
 def _rename_measurement_in_line(
     line: str,
     measurement_to_rename: str,
@@ -108,6 +127,16 @@ def drop_measurement(file_path: str | Path, measurement_name: str) -> int:
     )
 
 
+def keep_measurements(
+    file_path: str | Path, measurement_names: tuple[str]
+) -> int:
+    """Remove all other measurements from an InfluxDB line protocol file."""
+    return _rewrite_file_in_place(
+        file_path,
+        lambda line: _keep_measurement(line, measurement_names),
+    )
+
+
 def rename_measurement(
     file_path: str | Path,
     measurement_name: str,
@@ -161,6 +190,29 @@ def drop_measurement_command(
 ) -> None:
     """Drop a measurement from a line protocol file."""
     modified_line_count = drop_measurement(filename, measurement_name)
+    if verbose:
+        click.echo(f"Modified {modified_line_count} lines.")
+
+
+@click.command("keep-measurements")
+@click.argument(
+    "filename", type=click.Path(exists=True, dir_okay=False, path_type=str)
+)
+@click.argument("measurement_names", nargs=-1, required=True)
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="Show how many lines were modified.",
+)
+def keep_measurements_command(
+    filename: str,
+    measurement_names: tuple[str],
+    *,
+    verbose: bool,
+) -> None:
+    """Drop all measurements except some from a line protocol file."""
+    modified_line_count = keep_measurements(filename, measurement_names)
     if verbose:
         click.echo(f"Modified {modified_line_count} lines.")
 

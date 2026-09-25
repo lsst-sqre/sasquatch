@@ -5,6 +5,7 @@ import click
 from .fields import drop_field, rename_field, show_fields
 from .measurements import (
     drop_measurement_command,
+    keep_measurements_command,
     list_stale_measurements_command,
     rename_measurement_command,
     show_measurements,
@@ -32,6 +33,7 @@ line_protocol.add_command(rename_tag)
 line_protocol.add_command(rename_field)
 line_protocol.add_command(show_measurements)
 line_protocol.add_command(drop_measurement_command)
+line_protocol.add_command(keep_measurements_command)
 line_protocol.add_command(rename_measurement_command)
 line_protocol.add_command(convert_tag_to_field_command)
 

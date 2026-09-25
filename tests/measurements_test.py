@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from click.testing import CliRunner
+from safir.testing.data import Data
 
 from sasquatch.cli import main
 
@@ -104,6 +105,81 @@ def test_drop_measurement_rewrites_line_protocol_file(tmp_path: Path) -> None:
     assert data_file.read_text(encoding="utf-8") == _with_header(
         "# comment\ncpu value=1i\n"
     )
+
+
+def test_keep_measurements_rewrites_line_protocol_file(
+    tmp_path: Path, data: Data
+) -> None:
+    """The CLI should keep only matching measurement records."""
+    data_file = tmp_path / "data.lp"
+    _ = data_file.write_text(data.read_text("input/weather.lp"))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "line-protocol",
+            "keep-measurements",
+            str(data_file),
+            "weather",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == ""
+    expected = data_file.read_text()
+    data.assert_text_matches(expected, "only-weather.lp")
+
+
+def test_keep_measurements_keeps_multiple(tmp_path: Path, data: Data) -> None:
+    """The CLI should keep only matching measurement records."""
+    data_file = tmp_path / "data.lp"
+    _ = data_file.write_text(data.read_text("input/weather.lp"))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "line-protocol",
+            "keep-measurements",
+            str(data_file),
+            "weather",
+            "weather2",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == ""
+    expected = data_file.read_text()
+    data.assert_text_matches(expected, "some-weather.lp")
+
+
+def test_keep_measurements_verbose_reports_modified_line_count(
+    tmp_path: Path, data: Data
+) -> None:
+    """Verbose mode should report how many lines changed."""
+    data_file = tmp_path / "data.lp"
+    _ = data_file.write_text(data.read_text("input/weather.lp"))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "influxdb",
+            "line-protocol",
+            "keep-measurements",
+            str(data_file),
+            "weather",
+            "-v",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Modified 3 lines.\n"
+    expected = data_file.read_text()
+    data.assert_text_matches(expected, "only-weather.lp")
 
 
 def test_drop_measurement_matches_unescaped_measurement_name(
