@@ -7,4 +7,5 @@ CREATE DATABASE "target.metrics"
 # writing tsm data
 # comment
 weather,region=us temp=82
+cpu value=1i
 weather,region=eu humidity=41

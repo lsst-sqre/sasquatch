@@ -5,7 +5,7 @@ CREATE DATABASE "target.metrics"
 # CONTEXT-DATABASE:target.metrics
 # CONTEXT-RETENTION-POLICY:forever
 # writing tsm data
-# comment\n"
+# comment
 weather,region=us temp=82
 cpu value=1i
 weather1,region=eu humidity=41

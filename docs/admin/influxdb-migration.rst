@@ -197,6 +197,7 @@ The ``sasquatch influxdb line-protocol`` implements the following operations to 
 - ``convert-tag-to-field``:  Convert a tag key and value into a string field.
 - ``drop-field``:            Drop a field key from a line protocol file.
 - ``drop-measurement``:      Drop a measurement from a line protocol file.
+- ``keep-measurements``:     Keep only certain measurements in a line protocol file.
 - ``drop-tag``:              Drop a tag key from a line protocol file.
 - ``rename-field``:          Rename a field key in a line protocol file.
 - ``rename-measurement``:    Rename a measurement in a line protocol file.

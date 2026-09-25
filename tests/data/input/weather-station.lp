@@ -5,6 +5,4 @@ CREATE DATABASE "target.metrics"
 # CONTEXT-DATABASE:target.metrics
 # CONTEXT-RETENTION-POLICY:forever
 # writing tsm data
-# comment
-weather,region=us temp=82
-weather,region=eu humidity=41
+weather\ station,tag\,key=value summary="hot, dry day",temp=82
