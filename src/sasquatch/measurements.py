@@ -17,6 +17,7 @@ from .line_protocol import (
     _is_metadata_line,
     _rewrite_file_in_place,
 )
+from .logging import configure_logging
 from .services.influxdb import InfluxDBService
 from .storage.influxdb import InfluxDBStorage
 
@@ -217,6 +218,15 @@ def rename_measurement_command(
     help="A measurement is stale if it has seen no data in this much time.",
 )
 @click.option(
+    "--log-level",
+    type=click.Choice(
+        ["debug", "info", "warning", "error", "critical"],
+        case_sensitive=False,
+    ),
+    default="warning",
+    show_default=True,
+)
+@click.option(
     "--timeout",
     type=float,
     default=None,
@@ -241,10 +251,13 @@ def list_stale_measurements_command(
     retention_policy: str | None,
     since: timedelta,
     timeout: float,
+    log_level: str,
     *,
     ssl: bool,
 ) -> None:
     """List all measurements that haven't recieved data in a while."""
+    configure_logging(level=log_level.upper())
+
     client = InfluxDBClient(
         host=host,
         port=port,
@@ -264,8 +277,4 @@ def list_stale_measurements_command(
         click.echo("There are no stale measurements", err=True)
         return
     for point in stale:
-        click.echo(
-            f"{point.retention_policy} -"
-            f" {point.measurement} -"
-            f" {point.time.isoformat()}"
-        )
+        click.echo(f"{point.retention_policy} - {point.measurement}")

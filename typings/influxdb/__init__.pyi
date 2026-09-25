@@ -1,13 +1,13 @@
 # Typings from: https://github.com/influxdata/influxdb-python/
 # Some of these may not be exactly right, modify as needed the more we use
 # this.
-from collections.abc import Generator
 from datetime import datetime
 from typing import Self, TypedDict
 
+from influxdb.resultset import ResultSet
 from requests import Session
 
-__all__ = ["InfluxDBClient", "ResultSet"]
+__all__ = ["InfluxDBClient"]
 
 type ValidValue = str | int | float | bool
 
@@ -32,13 +32,6 @@ class _ClientDict(TypedDict):
 
     time: str | datetime
     """The timestamp of this point."""
-
-class ResultSet:
-    def get_points(
-        self,
-        measurement: str | None = None,
-        tags: dict[str, ValidValue] | None = None,
-    ) -> Generator[dict[str, str]]: ...
 
 class InfluxDBClient:
     def __init__(
