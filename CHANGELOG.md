@@ -1,5 +1,14 @@
 # Change log
 
+## 1.6.0 (2026-09-29)
+
+- Add `sasquatch influxdb list-stale-measurements` CLI command. This command
+  lists all measurements in an InfluxDB database that have not recorded a point
+  since some amount of time (30d by default).
+- Add `sasquatch influxdb line-protocol keep-measurements --measurements`
+  command and transformation operation. This operation drops all measurements
+  EXCEPT those specified.
+
 ## 1.5.0 (2026-09-21)
 
 - Add Kafka topic discovery and dynamic Telegraf configuration updates with
