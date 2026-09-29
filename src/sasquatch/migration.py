@@ -21,7 +21,11 @@ from .line_protocol import (
     _is_metadata_line,
     _split_record_content,
 )
-from .measurements import drop_measurement, rename_measurement
+from .measurements import (
+    drop_measurement,
+    keep_measurements,
+    rename_measurement,
+)
 from .tag_to_field import TagToFieldConflictError, convert_tag_to_field
 from .tags import drop_measurement_tag_key, rename_measurement_tag_key
 
@@ -595,6 +599,17 @@ def _required_string(operation: dict[str, Any], key: str) -> str:
     return value
 
 
+def _required_list(operation: dict[str, Any], key: str) -> list[str]:
+    """Return a required list field from a transform operation."""
+    value = operation.get(key)
+    if not isinstance(value, list) or not value:
+        raise click.ClickException(
+            f"Transform operation {operation.get('op')!r} requires list"
+            f" {key!r}."
+        )
+    return value
+
+
 def _operation_keys(op_name: str) -> list[str]:
     """Return required keys for one transform operation."""
     required_keys = {
@@ -603,6 +618,7 @@ def _operation_keys(op_name: str) -> list[str]:
         "drop-field": ["field"],
         "rename-field": ["from", "to"],
         "drop-measurement": ["measurement"],
+        "keep-measurements": ["measurements"],
         "rename-measurement": ["from", "to"],
         "convert-tag-to-field": ["tag"],
     }
@@ -630,8 +646,12 @@ def _normalize_operation(operation: dict[str, Any]) -> dict[str, Any]:
     if measurement is not None:
         normalized["measurement"] = measurement
 
+    lists = ["measurements"]
     for key in _operation_keys(op_name):
-        normalized[key] = _required_string(operation, key)
+        if key not in lists:
+            normalized[key] = _required_string(operation, key)
+        else:
+            normalized[key] = _required_list(operation, key)
 
     return normalized
 
@@ -703,6 +723,10 @@ def _apply_operation(file_path: Path, operation: dict[str, Any]) -> None:
             )
         elif op_name == "drop-measurement":
             drop_measurement(file_path, operation["measurement"])
+        elif op_name == "keep-measurements":
+            keep_measurements(
+                file_path, measurement_names=operation["measurements"]
+            )
         elif op_name == "rename-measurement":
             rename_measurement(
                 file_path,
