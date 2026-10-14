@@ -17,7 +17,7 @@
 #   - Runs a non-root user.
 #   - Sets up the entrypoint and port.
 
-FROM python:3.14.7-slim-trixie AS base-image
+FROM python:3.15.0rc3-slim-trixie AS base-image
 
 # Update system packages.
 COPY scripts/install-base-packages.sh .
