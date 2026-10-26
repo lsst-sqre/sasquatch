@@ -18,6 +18,9 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     timeout-minutes: 10
 
     steps:
@@ -36,6 +39,8 @@ jobs:
 
       - name: Run tox
         run: uv run --only-group=tox tox run -e lint,typing,py,docs,docs-linkcheck
+        env:
+          OOK_TOKEN: ${{ secrets.OOK_TOKEN }}
 
       - name: Report status
         if: failure()
