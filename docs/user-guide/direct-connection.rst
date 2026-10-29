@@ -116,7 +116,7 @@ Providing Kafka credentials to your app
 =======================================
 
 Once you have a ``Secret`` with auth TLS credentials in your app's namespace, you can mount that secret into your app's container, and provide connection and auth info as environment variables.
-If your app is a `Safir`_ app, you can use the `Safir Kafka helpers <https://safir.lsst.io/user-guide/kafka.html>`__ to construct a Kafka client.
+If your app is a `Safir`_ app, you can use the `Safir Kafka helpers <https://safir.lsst.io/user-guide/kafka/index.html>`__ to construct a Kafka client.
 
 .. code-block:: yaml
 
