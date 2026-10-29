@@ -96,6 +96,10 @@ jobs:
 
   docs:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
     timeout-minutes: 10
 
     steps:
@@ -116,14 +120,18 @@ jobs:
 
       - name: Run tox
         run: uv run --only-group=tox tox run -e docs
+        env:
+          OOK_TOKEN: ${{ secrets.OOK_TOKEN }}
 
-      - name: Upload to LSST the Docs
-        uses: lsst-sqre/ltd-upload@v1
+      - name: Upload to Docverse
+        uses: lsst-sqre/docverse-upload@v1
         with:
+          org: rubin
           project: "sasquatch"
           dir: "docs/_build/html"
-          username: ${{ secrets.LTD_USERNAME }}
-          password: ${{ secrets.LTD_PASSWORD }}
+          token: ${{ secrets.DOCVERSE_TOKEN }}
+          github-token: ${{ github.token }}
+          comment-on-pr: "true"
         if: >
           github.event_name != 'merge_group'
           && (github.event_name != 'pull_request'
@@ -131,6 +139,9 @@ jobs:
 
   docs-linkcheck:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     timeout-minutes: 15
 
     steps:
@@ -151,3 +162,5 @@ jobs:
 
       - name: Run tox
         run: uv run --only-group=tox tox run -e docs-linkcheck
+        env:
+          OOK_TOKEN: ${{ secrets.OOK_TOKEN }}
